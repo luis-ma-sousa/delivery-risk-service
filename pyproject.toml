@@ -1,0 +1,19 @@
+[project]
+name = "delivery-risk-service"
+version = "0.1.0"
+description = "Predicts the probability that an order is delivered after its estimated delivery date"
+readme = "README.md"
+authors = [
+    { name = "Luis Sousa", email = "luis.95.sousa.31@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "polars>=1.43.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "delivery_risk"

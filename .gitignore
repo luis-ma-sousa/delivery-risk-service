@@ -1,0 +1,20 @@
+# Environments
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Data — never versioned
+data/
+
+# Recon output
+recon_output.txt
+
+# macOS
+.DS_Store
