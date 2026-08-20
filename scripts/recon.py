@@ -91,10 +91,62 @@ def report_referential_integrity(tables: dict[str, pl.DataFrame]) -> None:
         print(f"  parents without children:        {childless:>7}")
 
 
+def report_domain_integrity(tables: dict[str, pl.DataFrame]) -> None:
+    """Cross order status against the presence of each timestamp.
+
+    Status and timestamps disagree in both directions: orders marked as
+    delivered with no delivery date, and cancelled orders that carry one.
+    Both are recorded faithfully in `raw` and excluded in `curated`.
+    """
+    orders = tables["orders"]
+
+    date_columns = [
+        "order_approved_at",
+        "order_delivered_carrier_date",
+        "order_delivered_customer_date",
+        "order_estimated_delivery_date",
+    ]
+
+    print("\n=== DOMAIN INTEGRITY ===")
+    print("\nTimestamp presence by order status")
+
+    summary = (
+        orders.group_by("order_status")
+        .agg(
+            pl.len().alias("total"),
+            *[
+                pl.col(column).is_not_null().sum().alias(column.replace("order_", ""))
+                for column in date_columns
+            ],
+        )
+        .sort("total", descending=True)
+    )
+    print(summary)
+
+    delivered = orders.filter(pl.col("order_status") == "delivered")
+    delivered_without_date = delivered.filter(
+        pl.col("order_delivered_customer_date").is_null()
+    ).height
+    cancelled_with_date = orders.filter(
+        (pl.col("order_status") == "canceled")
+        & pl.col("order_delivered_customer_date").is_not_null()
+    ).height
+
+    print("\nContradictions")
+    print(f"  delivered without delivery date:  {delivered_without_date:>7}")
+    print(f"  cancelled with delivery date:     {cancelled_with_date:>7}")
+
+    trainable = delivered.height - delivered_without_date
+    print("\nTraining set definition")
+    print("  status == 'delivered' AND delivery date is not null")
+    print(f"  eligible rows:                    {trainable:>7}")
+    print(f"  share of all orders:              {trainable / orders.height:>7.1%}")
+
 def main() -> None:
     tables = load_all()
     report_key_candidates(tables)
     report_referential_integrity(tables)
+    report_domain_integrity(tables)
 
 
 
