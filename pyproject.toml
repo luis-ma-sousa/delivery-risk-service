@@ -17,3 +17,8 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "delivery_risk"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+]
