@@ -171,6 +171,69 @@ def report_temporal_ordering(tables: dict[str, pl.DataFrame]) -> None:
         label = f"{later.replace('order_', '')} < {earlier.replace('order_', '')}"
         print(f"  {label:<52} {violations:>6}  of {comparable:>6}  ({share:.2%})")
 
+BRAZIL_BOUNDS = {
+    "lat_min": -34.0,
+    "lat_max": 5.3,
+    "lng_min": -74.0,
+    "lng_max": -34.8,
+}
+
+
+def report_geolocation(tables: dict[str, pl.DataFrame]) -> None:
+    """Assess whether a postcode prefix can be collapsed to a single point.
+
+    Prefixes carry many geocoded points each. Aggregating them is unavoidable:
+    customers and sellers are located by prefix only, never by coordinate.
+    What is measured here is whether that aggregation is honest — how far apart
+    the points of one prefix lie — and how many prefixes the catalogue omits.
+    """
+    geolocation = tables["geolocation"]
+
+    print("\n=== GEOLOCATION ===")
+
+    prefixes = geolocation["geolocation_zip_code_prefix"].n_unique()
+    points = geolocation["geolocation_zip_code_prefix"].value_counts()["count"]
+    print(f"\nrows: {geolocation.height}   distinct prefixes: {prefixes}")
+    print(f"  points per prefix: median {points.median():.0f}   max {points.max()}")
+
+    outside = geolocation.filter(
+        (pl.col("geolocation_lat") < BRAZIL_BOUNDS["lat_min"])
+        | (pl.col("geolocation_lat") > BRAZIL_BOUNDS["lat_max"])
+        | (pl.col("geolocation_lng") < BRAZIL_BOUNDS["lng_min"])
+        | (pl.col("geolocation_lng") > BRAZIL_BOUNDS["lng_max"])
+    ).height
+    print(f"\ncoordinates outside the Brazil bounding box: {outside}")
+
+    dispersion = geolocation.group_by("geolocation_zip_code_prefix").agg(
+        (pl.col("geolocation_lat").max() - pl.col("geolocation_lat").min()).alias("lat_span"),
+        (pl.col("geolocation_lng").max() - pl.col("geolocation_lng").min()).alias("lng_span"),
+    )
+    span = dispersion["lat_span"]
+    incoherent = dispersion.filter(pl.col("lat_span") > 1.0).height
+
+    print("\nlatitude span within a prefix, in degrees (1 degree is about 111 km)")
+    print(f"  median {span.median():.4f}   p75 {span.quantile(0.75):.4f}   max {span.max():.2f}")
+    print(f"  prefixes spanning more than 1 degree: {incoherent} ({incoherent / dispersion.height:.2%})")
+
+    geo_prefixes = geolocation.select(
+        pl.col("geolocation_zip_code_prefix").unique().alias("prefix")
+    )
+    lookups = [
+        ("customers", "customer_zip_code_prefix"),
+        ("sellers", "seller_zip_code_prefix"),
+    ]
+
+    print("\nprefixes absent from the geolocation catalogue")
+    for name, column in lookups:
+        df = tables[name]
+        missing = df.select(pl.col(column).alias("prefix")).join(
+            geo_prefixes, on="prefix", how="anti"
+        )
+        share = missing.height / df.height
+        print(
+            f"  {name:<12} {missing.height:>5} of {df.height:>6} rows ({share:.2%})"
+            f"   {missing['prefix'].n_unique():>4} distinct prefixes"
+        )
 
 def main() -> None:
     tables = load_all()
@@ -178,7 +241,7 @@ def main() -> None:
     report_referential_integrity(tables)
     report_domain_integrity(tables)
     report_temporal_ordering(tables)
-
+    report_geolocation(tables)
 
 if __name__ == "__main__":
     main()
