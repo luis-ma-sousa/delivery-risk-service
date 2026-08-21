@@ -142,12 +142,42 @@ def report_domain_integrity(tables: dict[str, pl.DataFrame]) -> None:
     print(f"  eligible rows:                    {trainable:>7}")
     print(f"  share of all orders:              {trainable / orders.height:>7.1%}")
 
+def report_temporal_ordering(tables: dict[str, pl.DataFrame]) -> None:
+    """Count violations of the expected chronological order, pair by pair.
+
+    Each pair fails for its own reason and warrants its own decision, so they
+    are never aggregated into a single count. The estimated delivery date is
+    deliberately excluded: a delivery later than the estimate is the target
+    variable, not a violation.
+    """
+    orders = tables["orders"]
+
+    pairs = [
+        ("order_purchase_timestamp", "order_approved_at"),
+        ("order_approved_at", "order_delivered_carrier_date"),
+        ("order_delivered_carrier_date", "order_delivered_customer_date"),
+    ]
+
+    print("\n=== TEMPORAL ORDERING ===")
+    print("\nRows where the later timestamp precedes the earlier one")
+
+    for earlier, later in pairs:
+        comparable = orders.filter(
+            pl.col(earlier).is_not_null() & pl.col(later).is_not_null()
+        ).height
+        violations = orders.filter(pl.col(later) < pl.col(earlier)).height
+        share = violations / comparable if comparable else 0.0
+
+        label = f"{later.replace('order_', '')} < {earlier.replace('order_', '')}"
+        print(f"  {label:<52} {violations:>6}  of {comparable:>6}  ({share:.2%})")
+
+
 def main() -> None:
     tables = load_all()
     report_key_candidates(tables)
     report_referential_integrity(tables)
     report_domain_integrity(tables)
-
+    report_temporal_ordering(tables)
 
 
 if __name__ == "__main__":
