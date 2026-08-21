@@ -235,8 +235,36 @@ def report_geolocation(tables: dict[str, pl.DataFrame]) -> None:
             f"   {missing['prefix'].n_unique():>4} distinct prefixes"
         )
 
+def report_shapes(tables: dict[str, pl.DataFrame]) -> None:
+    """Dimensions, dtypes and null counts per table.
+
+    Columns without nulls are omitted from the null section: a table with
+    sixty clean columns should not produce sixty lines of zeros.
+    """
+    print("\n=== SHAPES ===")
+    for name, df in tables.items():
+        print(f"\n{name}: {df.height} rows, {df.width} columns")
+
+        for column, dtype in df.schema.items():
+            print(f"  {column:<36} {dtype}")
+
+        nulls = [
+            (column, count)
+            for column, count in zip(df.columns, df.null_count().row(0))
+            if count
+        ]
+        if not nulls:
+            print("  no nulls")
+            continue
+
+        print("  nulls:")
+        for column, count in nulls:
+            print(f"    {column:<34} {count:>7} ({count / df.height:.2%})")
+
+
 def main() -> None:
     tables = load_all()
+    report_shapes(tables)
     report_key_candidates(tables)
     report_referential_integrity(tables)
     report_domain_integrity(tables)
