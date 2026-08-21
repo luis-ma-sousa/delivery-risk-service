@@ -1,13 +1,12 @@
+import os
 from logging.config import fileConfig
 
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-
-import os
-
-from dotenv import load_dotenv
+from delivery_risk.models import Base
 
 load_dotenv()
 
@@ -25,16 +24,21 @@ config.set_main_option("sqlalchemy.url", database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# Model metadata, read by autogenerate to work out what the schema should be.
+target_metadata = Base.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+
+def include_object(obj, name, type_, reflected, compare_to):
+    """Exclude objects Alembic should not manage.
+
+    With include_schemas enabled, autogenerate inspects every schema in the
+    database, including `public`, where Alembic keeps its own version table.
+    That table is not part of the model metadata, so autogenerate would propose
+    dropping it.
+    """
+    if type_ == "table" and name == "alembic_version":
+        return False
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -55,6 +59,9 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
+        include_object=include_object,
+        version_table_schema="public",
     )
 
     with context.begin_transaction():
@@ -76,7 +83,11 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_schemas=True,
+            include_object=include_object,
+            version_table_schema="public",
         )
 
         with context.begin_transaction():
