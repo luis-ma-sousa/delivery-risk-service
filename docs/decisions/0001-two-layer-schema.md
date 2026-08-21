@@ -28,7 +28,11 @@ every integrity decision into query code, where it is invisible and repeated.
 
 ## Consequences
 
-- Ingestion never fails on dirty input; failures surface in transformation.
+- Ingestion does not fail on dirty values; failures surface in transformation.
+- `raw` enforces entity integrity only: a natural key may not repeat. Domain
+  and referential integrity are deferred to `curated`. A duplicated key aborts
+  the load, which is intended — it signals a fault upstream rather than dirty
+  data in the source.
 - Every exclusion is expressed as SQL, reviewable and re-runnable.
 - Row counts differ between layers. This is expected, and the delta is itself
   a quality signal worth reporting.
