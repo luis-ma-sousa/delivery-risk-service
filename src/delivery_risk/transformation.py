@@ -8,7 +8,14 @@ import polars as pl
 from sqlalchemy import insert, text
 from sqlalchemy.orm import Session
 
-from delivery_risk.models import Person, ZipCodeLocation, CategoryTranslation, Seller, Product
+from delivery_risk.models import (
+    Person,
+    ZipCodeLocation,
+    CategoryTranslation,
+    Seller,
+    Product,
+    Customer,
+)
 
 BRAZIL_BOUNDS = {
     "lat_min": -34.0,
@@ -265,4 +272,39 @@ def transform_products(session: Session) -> None:
 
     truncate(session, Product)
     written = write_frame(session, Product, converted)
+    print(f"  written:                    {written:>8}")
+
+def transform_customers(session: Session) -> None:
+    """Copy the per-order customer records, linked to person and location.
+
+    Each row is the delivery address of a single order, not a customer: the
+    relationship to orders is 1:1. The person behind it is referenced through
+    `person_id` (ADR 0005).
+
+    278 rows carry a prefix the location catalogue does not cover; their
+    location is null, the row is kept (ADR 0004).
+    """
+    print("\n=== customers ===")
+
+    customers = read_frame(
+        session,
+        """
+        SELECT c.customer_id,
+               c.customer_unique_id AS person_id,
+               z.zip_code_prefix,
+               c.customer_city AS city,
+               c.customer_state AS state
+        FROM raw.customers c
+        LEFT JOIN curated.zip_code_locations z
+               ON z.zip_code_prefix = c.customer_zip_code_prefix
+        """,
+    )
+
+    unlocated = customers.filter(pl.col("zip_code_prefix").is_null()).height
+
+    print(f"  source rows:                {customers.height:>8}")
+    print(f"  without a known location:   {unlocated:>8}")
+
+    truncate(session, Customer)
+    written = write_frame(session, Customer, customers)
     print(f"  written:                    {written:>8}")

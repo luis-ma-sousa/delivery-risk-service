@@ -12,6 +12,7 @@ from delivery_risk.transformation import (
     transform_zip_code_locations,
     transform_category_translation, 
     transform_products,
+    transform_customers,
 )
 
 def main() -> None:
@@ -21,6 +22,7 @@ def main() -> None:
         transform_category_translation(session)
         transform_sellers(session)
         transform_products(session)
+        transform_customers(session)
         session.commit()
     print("\ndone")
 

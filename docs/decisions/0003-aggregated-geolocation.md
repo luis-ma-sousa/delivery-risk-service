@@ -56,3 +56,7 @@ possibly one or two additional rows.
 - Postcode prefixes are stored as text, never as integers. Prefixes in the
   01000–09999 range carry a leading zero that integer parsing silently
   discards, which would break the join for the entire São Paulo region.
+- Five prefixes have every point outside the bounding box and therefore do not
+  survive aggregation at all. One of them is used by a customer, so the count
+  of customers without a location is 279 rather than the 278 the source would
+  suggest.
