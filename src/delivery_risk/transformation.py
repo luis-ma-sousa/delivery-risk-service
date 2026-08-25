@@ -17,6 +17,7 @@ from delivery_risk.models import (
     Customer,
     Order,
     OrderItem,
+    OrderPayment,
 )
 
 BRAZIL_BOUNDS = {
@@ -458,4 +459,49 @@ def transform_order_items(session: Session) -> None:
 
     truncate(session, OrderItem)
     written = write_frame(session, OrderItem, converted)
+    print(f"  written:                    {written:>8}")
+
+def transform_order_payments(session: Session) -> None:
+    """Copy payments, keeping only those whose order survived.
+
+    One delivered order has no payment record at all: the relationship is 0:N,
+    not 1:N, and nothing here requires a payment to exist.
+    """
+    print("\n=== order_payments ===")
+
+    payments = read_frame(
+        session,
+        """
+        SELECT p.order_id,
+               p.payment_sequential,
+               p.payment_type,
+               p.payment_installments AS installments,
+               p.payment_value AS value
+        FROM raw.order_payments p
+        JOIN curated.orders o ON o.order_id = p.order_id
+        """,
+    )
+
+    source_rows = session.execute(
+        text("SELECT count(*) FROM raw.order_payments")
+    ).scalar_one()
+
+    converted = payments.with_columns(
+        pl.col("payment_sequential").cast(pl.Int64, strict=False),
+        pl.col("installments").cast(pl.Int64, strict=False),
+        pl.col("value").cast(pl.Float64, strict=False),
+    )
+
+    unparseable = converted.filter(
+        pl.col("payment_sequential").is_null()
+        | pl.col("installments").is_null()
+        | pl.col("value").is_null()
+    ).height
+
+    print(f"  source rows:                {source_rows:>8}")
+    print(f"  dropped with excluded orders:{source_rows - payments.height:>7}")
+    print(f"  values that failed to parse:{unparseable:>8}")
+
+    truncate(session, OrderPayment)
+    written = write_frame(session, OrderPayment, converted)
     print(f"  written:                    {written:>8}")
