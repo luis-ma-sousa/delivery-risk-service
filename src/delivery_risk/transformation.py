@@ -15,6 +15,7 @@ from delivery_risk.models import (
     Seller,
     Product,
     Customer,
+    Order,
 )
 
 BRAZIL_BOUNDS = {
@@ -30,6 +31,16 @@ MISSING_TRANSLATIONS = {
 }
 
 BATCH_SIZE = 10_000
+
+DATE_COLUMNS = [
+    "purchase_timestamp",
+    "approved_at",
+    "delivered_carrier_date",
+    "delivered_customer_date",
+    "estimated_delivery_date",
+]
+
+SAO_PAULO = "America/Sao_Paulo"
 
 
 def read_frame(session: Session, query: str) -> pl.DataFrame:
@@ -307,4 +318,84 @@ def transform_customers(session: Session) -> None:
 
     truncate(session, Customer)
     written = write_frame(session, Customer, customers)
+    print(f"  written:                    {written:>8}")
+
+
+def transform_orders(session: Session) -> None:
+    """Copy orders, parsing timestamps and excluding contradictory rows.
+
+    Timestamps are naive in the source and are read as local time in
+    America/Sao_Paulo (ADR 0002). Ambiguous times, which occur twice on a
+    fall-back date, resolve to the earlier instant; times inside a
+    spring-forward gap do not exist and become null. Neither case arises in
+    this dataset, but the policy is explicit rather than left to the library.
+
+    Two groups are excluded (ADR 0013): orders delivered before despatch, and
+    cancelled orders carrying a delivery date.
+    """
+    print("\n=== orders ===")
+
+    orders = read_frame(
+        session,
+        """
+        SELECT order_id,
+               customer_id,
+               order_status AS status,
+               order_purchase_timestamp AS purchase_timestamp,
+               order_approved_at AS approved_at,
+               order_delivered_carrier_date AS delivered_carrier_date,
+               order_delivered_customer_date AS delivered_customer_date,
+               order_estimated_delivery_date AS estimated_delivery_date
+        FROM raw.orders
+        """,
+    )
+
+    parsed = orders.with_columns(
+        pl.col(column).str.to_datetime("%Y-%m-%d %H:%M:%S", strict=False)
+        for column in DATE_COLUMNS
+    )
+    unparseable = sum(
+        parsed[column].null_count() - orders[column].null_count()
+        for column in DATE_COLUMNS
+    )
+
+    aware = parsed.with_columns(
+        pl.col(column).dt.replace_time_zone(
+            SAO_PAULO, ambiguous="earliest", non_existent="null"
+        )
+        for column in DATE_COLUMNS
+    )
+    lost_to_dst = sum(
+        aware[column].null_count() - parsed[column].null_count()
+        for column in DATE_COLUMNS
+    )
+
+    impossible = aware.filter(
+        pl.col("delivered_customer_date") < pl.col("delivered_carrier_date")
+    ).height
+    cancelled_delivered = aware.filter(
+        (pl.col("status") == "canceled")
+        & pl.col("delivered_customer_date").is_not_null()
+    ).height
+
+    kept = aware.filter(
+        (
+            pl.col("delivered_customer_date").is_null()
+            | pl.col("delivered_carrier_date").is_null()
+            | (pl.col("delivered_customer_date") >= pl.col("delivered_carrier_date"))
+        )
+        & ~(
+            (pl.col("status") == "canceled")
+            & pl.col("delivered_customer_date").is_not_null()
+        )
+    )
+
+    print(f"  source rows:                {orders.height:>8}")
+    print(f"  timestamps unparseable:     {unparseable:>8}")
+    print(f"  timestamps lost to DST gap: {lost_to_dst:>8}")
+    print(f"  delivered before despatch:  {impossible:>8}  excluded (ADR 0013)")
+    print(f"  cancelled with delivery:    {cancelled_delivered:>8}  excluded (ADR 0013)")
+
+    truncate(session, Order)
+    written = write_frame(session, Order, kept)
     print(f"  written:                    {written:>8}")
