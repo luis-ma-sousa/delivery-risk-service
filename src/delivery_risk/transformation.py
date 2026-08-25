@@ -8,7 +8,7 @@ import polars as pl
 from sqlalchemy import insert, text
 from sqlalchemy.orm import Session
 
-from delivery_risk.models import ZipCodeLocation
+from delivery_risk.models import Person, ZipCodeLocation
 
 BRAZIL_BOUNDS = {
     "lat_min": -34.0,
@@ -33,6 +33,14 @@ def write_frame(session: Session, model: type, frame: pl.DataFrame) -> int:
         session.execute(insert(model), rows[start : start + BATCH_SIZE])
     return len(rows)
 
+def truncate(session: Session, model: type) -> None:
+    """Remove every row from a curated table before repopulating it.
+
+    Transformation is repeatable by construction: each run leaves `curated`
+    reflecting `raw` as it is now, not as it was plus what changed.
+    """
+    table = model.__table__
+    session.execute(text(f"TRUNCATE TABLE {table.schema}.{table.name} CASCADE"))
 
 def transform_zip_code_locations(session: Session) -> None:
     """Collapse the geolocation catalogue to one coordinate per prefix.
@@ -90,5 +98,34 @@ def transform_zip_code_locations(session: Session) -> None:
     print(f"  prefixes spanning over 1 degree of latitude: {incoherent} "
           f"({incoherent / locations.height:.2%}) — kept, see ADR 0003")
 
+    truncate(session, ZipCodeLocation)
     written = write_frame(session, ZipCodeLocation, locations)
+    print(f"  written:                    {written:>8}")
+
+def transform_persons(session: Session) -> None:
+    """Extract the distinct recurring buyers from the customer records.
+
+    The source customer table holds one row per order, with 96096 distinct
+    people across 99441 rows. The person is an entity the source references
+    but does not model (ADR 0005).
+    """
+    print("\n=== persons ===")
+
+    persons = read_frame(
+        session,
+        """
+        SELECT DISTINCT customer_unique_id AS person_id
+        FROM raw.customers
+        """,
+    )
+
+    source_rows = session.execute(
+        text("SELECT count(*) FROM raw.customers")
+    ).scalar_one()
+
+    print(f"  source customer rows:       {source_rows:>8}")
+    print(f"  distinct people:            {persons.height:>8}")
+
+    truncate(session, Person)
+    written = write_frame(session, Person, persons)
     print(f"  written:                    {written:>8}")
