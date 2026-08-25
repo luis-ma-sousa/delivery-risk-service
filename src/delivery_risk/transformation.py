@@ -8,7 +8,7 @@ import polars as pl
 from sqlalchemy import insert, text
 from sqlalchemy.orm import Session
 
-from delivery_risk.models import Person, ZipCodeLocation, CategoryTranslation, Seller
+from delivery_risk.models import Person, ZipCodeLocation, CategoryTranslation, Seller, Product
 
 BRAZIL_BOUNDS = {
     "lat_min": -34.0,
@@ -204,4 +204,65 @@ def transform_sellers(session: Session) -> None:
 
     truncate(session, Seller)
     written = write_frame(session, Seller, sellers)
+    print(f"  written:                    {written:>8}")
+
+
+def transform_products(session: Session) -> None:
+    """Copy products, converting their numeric attributes from text.
+
+    610 products carry no descriptive metadata at all — category, name length,
+    description length and photo count are null together — and two have no
+    physical dimensions. Both groups are kept: absent metadata may itself
+    predict something.
+
+    The category foreign key never fails to resolve, because the two
+    translations the source omits are supplied in `curated` (ADR 0012).
+    """
+    print("\n=== products ===")
+
+    products = read_frame(
+        session,
+        """
+        SELECT product_id,
+               product_category_name AS category_name,
+               product_name_lenght AS name_length,
+               product_description_lenght AS description_length,
+               product_photos_qty AS photos_qty,
+               product_weight_g AS weight_g,
+               product_length_cm AS length_cm,
+               product_height_cm AS height_cm,
+               product_width_cm AS width_cm
+        FROM raw.products
+        """,
+    )
+
+    numeric_columns = [
+        "name_length",
+        "description_length",
+        "photos_qty",
+        "weight_g",
+        "length_cm",
+        "height_cm",
+        "width_cm",
+    ]
+
+    null_before = {
+        column: products[column].null_count() for column in numeric_columns
+    }
+
+    converted = products.with_columns(
+        pl.col(column).cast(pl.Int64, strict=False) for column in numeric_columns
+    )
+
+    unparseable = sum(
+        converted[column].null_count() - null_before[column]
+        for column in numeric_columns
+    )
+
+    print(f"  source rows:                {products.height:>8}")
+    print(f"  without a category:         {converted['category_name'].null_count():>8}")
+    print(f"  values that failed to parse:{unparseable:>8}")
+
+    truncate(session, Product)
+    written = write_frame(session, Product, converted)
     print(f"  written:                    {written:>8}")
