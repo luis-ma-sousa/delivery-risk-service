@@ -16,6 +16,7 @@ from delivery_risk.models import (
     Product,
     Customer,
     Order,
+    OrderItem,
 )
 
 BRAZIL_BOUNDS = {
@@ -398,4 +399,63 @@ def transform_orders(session: Session) -> None:
 
     truncate(session, Order)
     written = write_frame(session, Order, kept)
+    print(f"  written:                    {written:>8}")
+
+def transform_order_items(session: Session) -> None:
+    """Copy order lines, keeping only those whose order survived.
+
+    The inner join against `curated.orders` drops lines belonging to the
+    twenty-nine orders excluded by ADR 0013: a line cannot reference an order
+    that is not there.
+
+    `order_item_id` becomes an integer here. It counts items within an order,
+    running from 1 to 21, and is not a global identifier despite its name.
+    """
+    print("\n=== order_items ===")
+
+    items = read_frame(
+        session,
+        """
+        SELECT i.order_id,
+               i.order_item_id,
+               i.product_id,
+               i.seller_id,
+               i.shipping_limit_date,
+               i.price,
+               i.freight_value
+        FROM raw.order_items i
+        JOIN curated.orders o ON o.order_id = i.order_id
+        """,
+    )
+
+    source_rows = session.execute(
+        text("SELECT count(*) FROM raw.order_items")
+    ).scalar_one()
+
+    converted = items.with_columns(
+        pl.col("order_item_id").cast(pl.Int64, strict=False),
+        pl.col("price").cast(pl.Float64, strict=False),
+        pl.col("freight_value").cast(pl.Float64, strict=False),
+        pl.col("shipping_limit_date").str.to_datetime(
+            "%Y-%m-%d %H:%M:%S", strict=False
+        ),
+    ).with_columns(
+        pl.col("shipping_limit_date").dt.replace_time_zone(
+            SAO_PAULO, ambiguous="earliest", non_existent="null"
+        )
+    )
+
+    unparseable = converted.filter(
+        pl.col("order_item_id").is_null()
+        | pl.col("price").is_null()
+        | pl.col("freight_value").is_null()
+        | pl.col("shipping_limit_date").is_null()
+    ).height
+
+    print(f"  source rows:                {source_rows:>8}")
+    print(f"  dropped with excluded orders:{source_rows - items.height:>7}")
+    print(f"  values that failed to parse:{unparseable:>8}")
+
+    truncate(session, OrderItem)
+    written = write_frame(session, OrderItem, converted)
     print(f"  written:                    {written:>8}")
