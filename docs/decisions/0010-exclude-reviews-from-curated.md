@@ -31,7 +31,8 @@ before it, whatever its content.
 
 ## Consequences
 
-- `curated` has eight tables to `raw`'s nine.
+- `curated` has nine tables, as `raw` does, but not the same nine: reviews are
+  dropped and a person table is added (ADR 0005).
 - Reviews remain queryable in `raw` should a different question ever need them.
 - The 88% null rate on review titles and 59% on comment bodies is no longer a
   problem this layer has to model.

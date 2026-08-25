@@ -17,9 +17,28 @@ from delivery_risk.models.raw import (
     RawProduct,
     RawSeller,
 )
+from delivery_risk.models.curated import (
+    CategoryTranslation,
+    Customer,
+    Order,
+    OrderItem,
+    OrderPayment,
+    Person,
+    Product,
+    Seller,
+    ZipCodeLocation,
+)
+
 
 __all__ = [
     "Base",
+    "CategoryTranslation",
+    "Customer",
+    "Order",
+    "OrderItem",
+    "OrderPayment",
+    "Person",
+    "Product",
     "RawCategoryTranslation",
     "RawCustomer",
     "RawGeolocation",
@@ -29,4 +48,6 @@ __all__ = [
     "RawOrderReview",
     "RawProduct",
     "RawSeller",
+    "Seller",
+    "ZipCodeLocation",
 ]
