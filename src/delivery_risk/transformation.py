@@ -8,7 +8,7 @@ import polars as pl
 from sqlalchemy import insert, text
 from sqlalchemy.orm import Session
 
-from delivery_risk.models import Person, ZipCodeLocation, CategoryTranslation
+from delivery_risk.models import Person, ZipCodeLocation, CategoryTranslation, Seller
 
 BRAZIL_BOUNDS = {
     "lat_min": -34.0,
@@ -173,4 +173,35 @@ def transform_category_translation(session: Session) -> None:
 
     truncate(session, CategoryTranslation)
     written = write_frame(session, CategoryTranslation, translations)
+    print(f"  written:                    {written:>8}")
+
+def transform_sellers(session: Session) -> None:
+    """Copy sellers, resolving their postcode against the location catalogue.
+
+    Seven sellers carry a prefix the catalogue does not cover. Their location
+    is set to null rather than dropped: a seller exists independently of
+    whether we can place them on a map (ADR 0004).
+    """
+    print("\n=== sellers ===")
+
+    sellers = read_frame(
+        session,
+        """
+        SELECT s.seller_id,
+               z.zip_code_prefix,
+               s.seller_city AS city,
+               s.seller_state AS state
+        FROM raw.sellers s
+        LEFT JOIN curated.zip_code_locations z
+               ON z.zip_code_prefix = s.seller_zip_code_prefix
+        """,
+    )
+
+    unlocated = sellers.filter(pl.col("zip_code_prefix").is_null()).height
+
+    print(f"  source rows:                {sellers.height:>8}")
+    print(f"  without a known location:   {unlocated:>8}")
+
+    truncate(session, Seller)
+    written = write_frame(session, Seller, sellers)
     print(f"  written:                    {written:>8}")

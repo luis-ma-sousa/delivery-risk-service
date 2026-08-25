@@ -8,6 +8,7 @@ Run from the repository root, after the raw layer has been loaded:
 from delivery_risk.database import get_session
 from delivery_risk.transformation import (
     transform_persons,
+    transform_sellers,
     transform_zip_code_locations,
     transform_category_translation, 
 )
@@ -17,6 +18,7 @@ def main() -> None:
         transform_zip_code_locations(session)
         transform_persons(session)
         transform_category_translation(session)
+        transform_sellers(session)
         session.commit()
     print("\ndone")
 
