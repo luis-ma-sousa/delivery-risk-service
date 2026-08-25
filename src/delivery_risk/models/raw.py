@@ -5,11 +5,11 @@ ADR 0001. This layer must accept any row the source provides; rejection is the
 job of the transformation into `curated`.
 """
 
-from sqlalchemy import Text
+from sqlalchemy import BigInteger, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from delivery_risk.models.base import Base
-from sqlalchemy import BigInteger, Text
+
 
 class RawOrder(Base):
     __tablename__ = "orders"
@@ -34,6 +34,7 @@ class RawCustomer(Base):
     customer_zip_code_prefix: Mapped[str] = mapped_column(Text)
     customer_city: Mapped[str] = mapped_column(Text)
     customer_state: Mapped[str] = mapped_column(Text)
+
 
 class RawOrderItem(Base):
     __tablename__ = "order_items"
@@ -102,6 +103,7 @@ class RawCategoryTranslation(Base):
 
     product_category_name: Mapped[str] = mapped_column(Text, primary_key=True)
     product_category_name_english: Mapped[str] = mapped_column(Text)
+
 
 class RawOrderReview(Base):
     __tablename__ = "order_reviews"

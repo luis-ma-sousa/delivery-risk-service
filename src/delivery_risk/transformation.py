@@ -9,15 +9,15 @@ from sqlalchemy import insert, text
 from sqlalchemy.orm import Session
 
 from delivery_risk.models import (
-    Person,
-    ZipCodeLocation,
     CategoryTranslation,
-    Seller,
-    Product,
     Customer,
     Order,
     OrderItem,
     OrderPayment,
+    Person,
+    Product,
+    Seller,
+    ZipCodeLocation,
 )
 
 BRAZIL_BOUNDS = {
@@ -58,6 +58,7 @@ def write_frame(session: Session, model: type, frame: pl.DataFrame) -> int:
         session.execute(insert(model), rows[start : start + BATCH_SIZE])
     return len(rows)
 
+
 def truncate(session: Session, model: type) -> None:
     """Remove every row from a curated table before repopulating it.
 
@@ -66,6 +67,7 @@ def truncate(session: Session, model: type) -> None:
     """
     table = model.__table__
     session.execute(text(f"TRUNCATE TABLE {table.schema}.{table.name} CASCADE"))
+
 
 def transform_zip_code_locations(session: Session) -> None:
     """Collapse the geolocation catalogue to one coordinate per prefix.
@@ -91,9 +93,7 @@ def transform_zip_code_locations(session: Session) -> None:
         pl.col("lat").cast(pl.Float64, strict=False),
         pl.col("lng").cast(pl.Float64, strict=False),
     )
-    unparseable = parsed.filter(
-        pl.col("lat").is_null() | pl.col("lng").is_null()
-    ).height
+    unparseable = parsed.filter(pl.col("lat").is_null() | pl.col("lng").is_null()).height
 
     inside = parsed.filter(
         pl.col("lat").is_between(BRAZIL_BOUNDS["lat_min"], BRAZIL_BOUNDS["lat_max"])
@@ -120,12 +120,15 @@ def transform_zip_code_locations(session: Session) -> None:
     print(f"  unparseable coordinates:    {unparseable:>8}")
     print(f"  outside Brazil, discarded:  {geo.height - inside.height - unparseable:>8}")
     print(f"  prefixes lost entirely:     {prefixes_before - locations.height:>8}")
-    print(f"  prefixes spanning over 1 degree of latitude: {incoherent} "
-          f"({incoherent / locations.height:.2%}) — kept, see ADR 0003")
+    print(
+        f"  prefixes spanning over 1 degree of latitude: {incoherent} "
+        f"({incoherent / locations.height:.2%}) — kept, see ADR 0003"
+    )
 
     truncate(session, ZipCodeLocation)
     written = write_frame(session, ZipCodeLocation, locations)
     print(f"  written:                    {written:>8}")
+
 
 def transform_persons(session: Session) -> None:
     """Extract the distinct recurring buyers from the customer records.
@@ -144,9 +147,7 @@ def transform_persons(session: Session) -> None:
         """,
     )
 
-    source_rows = session.execute(
-        text("SELECT count(*) FROM raw.customers")
-    ).scalar_one()
+    source_rows = session.execute(text("SELECT count(*) FROM raw.customers")).scalar_one()
 
     print(f"  source customer rows:       {source_rows:>8}")
     print(f"  distinct people:            {persons.height:>8}")
@@ -154,6 +155,7 @@ def transform_persons(session: Session) -> None:
     truncate(session, Person)
     written = write_frame(session, Person, persons)
     print(f"  written:                    {written:>8}")
+
 
 MISSING_TRANSLATIONS = {
     "pc_gamer": "pc_gamer",
@@ -194,6 +196,7 @@ def transform_category_translation(session: Session) -> None:
     truncate(session, CategoryTranslation)
     written = write_frame(session, CategoryTranslation, translations)
     print(f"  written:                    {written:>8}")
+
 
 def transform_sellers(session: Session) -> None:
     """Copy sellers, resolving their postcode against the location catalogue.
@@ -266,17 +269,14 @@ def transform_products(session: Session) -> None:
         "width_cm",
     ]
 
-    null_before = {
-        column: products[column].null_count() for column in numeric_columns
-    }
+    null_before = {column: products[column].null_count() for column in numeric_columns}
 
     converted = products.with_columns(
         pl.col(column).cast(pl.Int64, strict=False) for column in numeric_columns
     )
 
     unparseable = sum(
-        converted[column].null_count() - null_before[column]
-        for column in numeric_columns
+        converted[column].null_count() - null_before[column] for column in numeric_columns
     )
 
     print(f"  source rows:                {products.height:>8}")
@@ -286,6 +286,7 @@ def transform_products(session: Session) -> None:
     truncate(session, Product)
     written = write_frame(session, Product, converted)
     print(f"  written:                    {written:>8}")
+
 
 def transform_customers(session: Session) -> None:
     """Copy the per-order customer records, linked to person and location.
@@ -353,31 +354,25 @@ def transform_orders(session: Session) -> None:
     )
 
     parsed = orders.with_columns(
-        pl.col(column).str.to_datetime("%Y-%m-%d %H:%M:%S", strict=False)
-        for column in DATE_COLUMNS
+        pl.col(column).str.to_datetime("%Y-%m-%d %H:%M:%S", strict=False) for column in DATE_COLUMNS
     )
     unparseable = sum(
-        parsed[column].null_count() - orders[column].null_count()
-        for column in DATE_COLUMNS
+        parsed[column].null_count() - orders[column].null_count() for column in DATE_COLUMNS
     )
 
     aware = parsed.with_columns(
-        pl.col(column).dt.replace_time_zone(
-            SAO_PAULO, ambiguous="earliest", non_existent="null"
-        )
+        pl.col(column).dt.replace_time_zone(SAO_PAULO, ambiguous="earliest", non_existent="null")
         for column in DATE_COLUMNS
     )
     lost_to_dst = sum(
-        aware[column].null_count() - parsed[column].null_count()
-        for column in DATE_COLUMNS
+        aware[column].null_count() - parsed[column].null_count() for column in DATE_COLUMNS
     )
 
     impossible = aware.filter(
         pl.col("delivered_customer_date") < pl.col("delivered_carrier_date")
     ).height
     cancelled_delivered = aware.filter(
-        (pl.col("status") == "canceled")
-        & pl.col("delivered_customer_date").is_not_null()
+        (pl.col("status") == "canceled") & pl.col("delivered_customer_date").is_not_null()
     ).height
 
     kept = aware.filter(
@@ -386,10 +381,7 @@ def transform_orders(session: Session) -> None:
             | pl.col("delivered_carrier_date").is_null()
             | (pl.col("delivered_customer_date") >= pl.col("delivered_carrier_date"))
         )
-        & ~(
-            (pl.col("status") == "canceled")
-            & pl.col("delivered_customer_date").is_not_null()
-        )
+        & ~((pl.col("status") == "canceled") & pl.col("delivered_customer_date").is_not_null())
     )
 
     print(f"  source rows:                {orders.height:>8}")
@@ -401,6 +393,7 @@ def transform_orders(session: Session) -> None:
     truncate(session, Order)
     written = write_frame(session, Order, kept)
     print(f"  written:                    {written:>8}")
+
 
 def transform_order_items(session: Session) -> None:
     """Copy order lines, keeping only those whose order survived.
@@ -429,17 +422,13 @@ def transform_order_items(session: Session) -> None:
         """,
     )
 
-    source_rows = session.execute(
-        text("SELECT count(*) FROM raw.order_items")
-    ).scalar_one()
+    source_rows = session.execute(text("SELECT count(*) FROM raw.order_items")).scalar_one()
 
     converted = items.with_columns(
         pl.col("order_item_id").cast(pl.Int64, strict=False),
         pl.col("price").cast(pl.Float64, strict=False),
         pl.col("freight_value").cast(pl.Float64, strict=False),
-        pl.col("shipping_limit_date").str.to_datetime(
-            "%Y-%m-%d %H:%M:%S", strict=False
-        ),
+        pl.col("shipping_limit_date").str.to_datetime("%Y-%m-%d %H:%M:%S", strict=False),
     ).with_columns(
         pl.col("shipping_limit_date").dt.replace_time_zone(
             SAO_PAULO, ambiguous="earliest", non_existent="null"
@@ -460,6 +449,7 @@ def transform_order_items(session: Session) -> None:
     truncate(session, OrderItem)
     written = write_frame(session, OrderItem, converted)
     print(f"  written:                    {written:>8}")
+
 
 def transform_order_payments(session: Session) -> None:
     """Copy payments, keeping only those whose order survived.
@@ -482,9 +472,7 @@ def transform_order_payments(session: Session) -> None:
         """,
     )
 
-    source_rows = session.execute(
-        text("SELECT count(*) FROM raw.order_payments")
-    ).scalar_one()
+    source_rows = session.execute(text("SELECT count(*) FROM raw.order_payments")).scalar_one()
 
     converted = payments.with_columns(
         pl.col("payment_sequential").cast(pl.Int64, strict=False),

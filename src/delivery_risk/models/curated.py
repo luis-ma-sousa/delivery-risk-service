@@ -53,9 +53,7 @@ class ZipCodeLocation(Base):
     __tablename__ = "zip_code_locations"
     __table_args__ = (
         CheckConstraint("latitude BETWEEN -34.0 AND 5.3", name="zip_latitude_in_brazil"),
-        CheckConstraint(
-            "longitude BETWEEN -74.0 AND -34.8", name="zip_longitude_in_brazil"
-        ),
+        CheckConstraint("longitude BETWEEN -74.0 AND -34.8", name="zip_longitude_in_brazil"),
         {"schema": "curated"},
     )
 
@@ -89,9 +87,7 @@ class Customer(Base):
     __table_args__ = {"schema": "curated"}
 
     customer_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    person_id: Mapped[str] = mapped_column(
-        ForeignKey("curated.persons.person_id"), nullable=False
-    )
+    person_id: Mapped[str] = mapped_column(ForeignKey("curated.persons.person_id"), nullable=False)
     zip_code_prefix: Mapped[str | None] = mapped_column(
         ForeignKey("curated.zip_code_locations.zip_code_prefix")
     )
@@ -180,9 +176,7 @@ class Order(Base):
         ForeignKey("curated.customers.customer_id"), nullable=False, unique=True
     )
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    purchase_timestamp: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
+    purchase_timestamp: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     approved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     delivered_carrier_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     delivered_customer_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
@@ -206,19 +200,13 @@ class OrderItem(Base):
         {"schema": "curated"},
     )
 
-    order_id: Mapped[str] = mapped_column(
-        ForeignKey("curated.orders.order_id"), primary_key=True
-    )
+    order_id: Mapped[str] = mapped_column(ForeignKey("curated.orders.order_id"), primary_key=True)
     order_item_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     product_id: Mapped[str] = mapped_column(
         ForeignKey("curated.products.product_id"), nullable=False
     )
-    seller_id: Mapped[str] = mapped_column(
-        ForeignKey("curated.sellers.seller_id"), nullable=False
-    )
-    shipping_limit_date: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
+    seller_id: Mapped[str] = mapped_column(ForeignKey("curated.sellers.seller_id"), nullable=False)
+    shipping_limit_date: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     freight_value: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
 
@@ -238,9 +226,7 @@ class OrderPayment(Base):
         {"schema": "curated"},
     )
 
-    order_id: Mapped[str] = mapped_column(
-        ForeignKey("curated.orders.order_id"), primary_key=True
-    )
+    order_id: Mapped[str] = mapped_column(ForeignKey("curated.orders.order_id"), primary_key=True)
     payment_sequential: Mapped[int] = mapped_column(Integer, primary_key=True)
     payment_type: Mapped[str] = mapped_column(Text, nullable=False)
     installments: Mapped[int] = mapped_column(Integer, nullable=False)

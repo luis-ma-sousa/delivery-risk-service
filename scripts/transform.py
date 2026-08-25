@@ -7,16 +7,17 @@ Run from the repository root, after the raw layer has been loaded:
 
 from delivery_risk.database import get_session
 from delivery_risk.transformation import (
-    transform_persons,
-    transform_sellers,
-    transform_zip_code_locations,
-    transform_category_translation, 
-    transform_products,
+    transform_category_translation,
     transform_customers,
-    transform_orders, 
     transform_order_items,
     transform_order_payments,
+    transform_orders,
+    transform_persons,
+    transform_products,
+    transform_sellers,
+    transform_zip_code_locations,
 )
+
 
 def main() -> None:
     with get_session() as session:

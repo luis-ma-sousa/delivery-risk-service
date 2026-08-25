@@ -25,4 +25,28 @@ module-name = "delivery_risk"
 [dependency-groups]
 dev = [
     "ipykernel>=7.3.0",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.4",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+ignore = ["SIM103"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["polars.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

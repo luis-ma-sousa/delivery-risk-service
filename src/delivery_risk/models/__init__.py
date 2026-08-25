@@ -6,17 +6,6 @@ is a table Alembic cannot see, and autogenerate would propose dropping it.
 """
 
 from delivery_risk.models.base import Base
-from delivery_risk.models.raw import (
-    RawCategoryTranslation,
-    RawCustomer,
-    RawGeolocation,
-    RawOrder,
-    RawOrderItem,
-    RawOrderPayment,
-    RawOrderReview,
-    RawProduct,
-    RawSeller,
-)
 from delivery_risk.models.curated import (
     CategoryTranslation,
     Customer,
@@ -28,7 +17,17 @@ from delivery_risk.models.curated import (
     Seller,
     ZipCodeLocation,
 )
-
+from delivery_risk.models.raw import (
+    RawCategoryTranslation,
+    RawCustomer,
+    RawGeolocation,
+    RawOrder,
+    RawOrderItem,
+    RawOrderPayment,
+    RawOrderReview,
+    RawProduct,
+    RawSeller,
+)
 
 __all__ = [
     "Base",

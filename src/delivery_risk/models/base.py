@@ -11,5 +11,3 @@ class Base(DeclarativeBase):
     the schema should look like, so a model class that is never imported is a
     table Alembic does not know about.
     """
-
-    

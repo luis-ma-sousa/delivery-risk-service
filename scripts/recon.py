@@ -19,7 +19,7 @@ FILES = {
     "orders": "olist_orders_dataset.csv",
     "products": "olist_products_dataset.csv",
     "sellers": "olist_sellers_dataset.csv",
-    "category_translation": "product_category_name_translation.csv"
+    "category_translation": "product_category_name_translation.csv",
 }
 
 ZIP_PREFIX_COLUMNS = {
@@ -28,9 +28,10 @@ ZIP_PREFIX_COLUMNS = {
     "sellers": "seller_zip_code_prefix",
 }
 
+
 def load_all() -> dict[str, pl.DataFrame]:
     """Read  every CSV in RAW_DIR, keyed by a short table name.
-    
+
     Postcode prefixes are read as strings: they are codes, not quantitites, and some
     carry leading zeros that interger parsing would discard."""
 
@@ -43,9 +44,6 @@ def load_all() -> dict[str, pl.DataFrame]:
         print(f"Loaded {name}: {tables[name].height} rows")
     return tables
 
-def report_shapes(tables: dict[str, pl.DataFrame]) -> None:
-    """Row counts, column counts, dtypes and null counts per table."""
-    load_all()
 
 def report_key_candidates(tables: dict[str, pl.DataFrame]) -> None:
     """Uniqueness of each *_id column."""
@@ -60,6 +58,7 @@ def report_key_candidates(tables: dict[str, pl.DataFrame]) -> None:
             distinct = df[column].n_unique()
             verdict = "UNIQUE" if distinct == df.height else "NOT UNIQUE"
             print(f"  {column:<40} {distinct:>8} distinct ({verdict})")
+
 
 def report_referential_integrity(tables: dict[str, pl.DataFrame]) -> None:
     """Count orphan rows for each candidate foreign key, in both directions.
@@ -142,6 +141,7 @@ def report_domain_integrity(tables: dict[str, pl.DataFrame]) -> None:
     print(f"  eligible rows:                    {trainable:>7}")
     print(f"  share of all orders:              {trainable / orders.height:>7.1%}")
 
+
 def report_temporal_ordering(tables: dict[str, pl.DataFrame]) -> None:
     """Count violations of the expected chronological order, pair by pair.
 
@@ -170,6 +170,7 @@ def report_temporal_ordering(tables: dict[str, pl.DataFrame]) -> None:
 
         label = f"{later.replace('order_', '')} < {earlier.replace('order_', '')}"
         print(f"  {label:<52} {violations:>6}  of {comparable:>6}  ({share:.2%})")
+
 
 BRAZIL_BOUNDS = {
     "lat_min": -34.0,
@@ -213,7 +214,10 @@ def report_geolocation(tables: dict[str, pl.DataFrame]) -> None:
 
     print("\nlatitude span within a prefix, in degrees (1 degree is about 111 km)")
     print(f"  median {span.median():.4f}   p75 {span.quantile(0.75):.4f}   max {span.max():.2f}")
-    print(f"  prefixes spanning more than 1 degree: {incoherent} ({incoherent / dispersion.height:.2%})")
+    print(
+        f"  prefixes spanning more than 1 degree: {incoherent} "
+        f"({incoherent / dispersion.height:.2%})"
+    )
 
     geo_prefixes = geolocation.select(
         pl.col("geolocation_zip_code_prefix").unique().alias("prefix")
@@ -235,6 +239,7 @@ def report_geolocation(tables: dict[str, pl.DataFrame]) -> None:
             f"   {missing['prefix'].n_unique():>4} distinct prefixes"
         )
 
+
 def report_shapes(tables: dict[str, pl.DataFrame]) -> None:
     """Dimensions, dtypes and null counts per table.
 
@@ -250,7 +255,7 @@ def report_shapes(tables: dict[str, pl.DataFrame]) -> None:
 
         nulls = [
             (column, count)
-            for column, count in zip(df.columns, df.null_count().row(0))
+            for column, count in zip(df.columns, df.null_count().row(0), strict=True) 
             if count
         ]
         if not nulls:
@@ -271,6 +276,6 @@ def main() -> None:
     report_temporal_ordering(tables)
     report_geolocation(tables)
 
+
 if __name__ == "__main__":
     main()
-
