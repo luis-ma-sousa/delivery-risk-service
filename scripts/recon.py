@@ -255,7 +255,7 @@ def report_shapes(tables: dict[str, pl.DataFrame]) -> None:
 
         nulls = [
             (column, count)
-            for column, count in zip(df.columns, df.null_count().row(0), strict=True) 
+            for column, count in zip(df.columns, df.null_count().row(0), strict=True)
             if count
         ]
         if not nulls:

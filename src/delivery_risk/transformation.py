@@ -4,11 +4,14 @@ Every exclusion here is traceable to a decision record, and every one is
 reported: a row dropped in silence is a row nobody knows about (ADR 0001).
 """
 
+from typing import cast
+
 import polars as pl
-from sqlalchemy import insert, text
+from sqlalchemy import Table, insert, inspect, text
 from sqlalchemy.orm import Session
 
 from delivery_risk.models import (
+    Base,
     CategoryTranslation,
     Customer,
     Order,
@@ -51,7 +54,7 @@ def read_frame(session: Session, query: str) -> pl.DataFrame:
     return pl.DataFrame([dict(row) for row in rows])
 
 
-def write_frame(session: Session, model: type, frame: pl.DataFrame) -> int:
+def write_frame(session: Session, model: type[Base], frame: pl.DataFrame) -> int:
     """Insert a frame into a curated table in batches."""
     rows = frame.to_dicts()
     for start in range(0, len(rows), BATCH_SIZE):
@@ -59,13 +62,13 @@ def write_frame(session: Session, model: type, frame: pl.DataFrame) -> int:
     return len(rows)
 
 
-def truncate(session: Session, model: type) -> None:
+def truncate(session: Session, model: type[Base]) -> None:
     """Remove every row from a curated table before repopulating it.
 
     Transformation is repeatable by construction: each run leaves `curated`
     reflecting `raw` as it is now, not as it was plus what changed.
     """
-    table = model.__table__
+    table = cast(Table, inspect(model).local_table)
     session.execute(text(f"TRUNCATE TABLE {table.schema}.{table.name} CASCADE"))
 
 

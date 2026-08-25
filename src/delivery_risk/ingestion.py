@@ -6,12 +6,14 @@ loading, so a run always leaves `raw` mirroring the files on disk.
 """
 
 from pathlib import Path
+from typing import cast
 
 import polars as pl
-from sqlalchemy import insert, text
+from sqlalchemy import Table, insert, inspect, text
 from sqlalchemy.orm import Session
 
 from delivery_risk.models import (
+    Base,
     RawCategoryTranslation,
     RawCustomer,
     RawGeolocation,
@@ -44,13 +46,13 @@ def load_csv(filename: str) -> pl.DataFrame:
     return pl.read_csv(RAW_DIR / filename, infer_schema_length=0)
 
 
-def truncate(session: Session, model: type) -> None:
-    """Remove every row from a table before reloading it."""
-    table = model.__table__
+def truncate(session: Session, model: type[Base]) -> None:
+    """Remove every row from a table before repopulating it."""
+    table = cast(Table, inspect(model).local_table)
     session.execute(text(f"TRUNCATE TABLE {table.schema}.{table.name}"))
 
 
-def insert_rows(session: Session, model: type, frame: pl.DataFrame) -> int:
+def insert_rows(session: Session, model: type[Base], frame: pl.DataFrame) -> int:
     """Insert a frame in batches, returning the number of rows written."""
     rows = frame.to_dicts()
     for start in range(0, len(rows), BATCH_SIZE):
