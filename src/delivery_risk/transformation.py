@@ -8,13 +8,18 @@ import polars as pl
 from sqlalchemy import insert, text
 from sqlalchemy.orm import Session
 
-from delivery_risk.models import Person, ZipCodeLocation
+from delivery_risk.models import Person, ZipCodeLocation, CategoryTranslation
 
 BRAZIL_BOUNDS = {
     "lat_min": -34.0,
     "lat_max": 5.3,
     "lng_min": -74.0,
     "lng_max": -34.8,
+}
+
+MISSING_TRANSLATIONS = {
+    "pc_gamer": "pc_gamer",
+    "portateis_cozinha_e_preparadores_de_alimentos": "kitchen_portables_and_food_preparers",
 }
 
 BATCH_SIZE = 10_000
@@ -128,4 +133,44 @@ def transform_persons(session: Session) -> None:
 
     truncate(session, Person)
     written = write_frame(session, Person, persons)
+    print(f"  written:                    {written:>8}")
+
+MISSING_TRANSLATIONS = {
+    "pc_gamer": "pc_gamer",
+    "portateis_cozinha_e_preparadores_de_alimentos": "kitchen_portables_and_food_preparers",
+}
+
+
+def transform_category_translation(session: Session) -> None:
+    """Copy the category translations, completing the two the source omits.
+
+    Products carry 73 distinct categories and the source translates 71. The
+    two missing entries are supplied here so the foreign key from products can
+    be declared; their English names are ours, not Olist's (ADR 0012).
+    """
+    print("\n=== category_translation ===")
+
+    source = read_frame(
+        session,
+        """
+        SELECT product_category_name AS category_name,
+               product_category_name_english AS category_name_english
+        FROM raw.category_translation
+        """,
+    )
+
+    supplied = pl.DataFrame(
+        {
+            "category_name": list(MISSING_TRANSLATIONS.keys()),
+            "category_name_english": list(MISSING_TRANSLATIONS.values()),
+        }
+    )
+
+    translations = pl.concat([source, supplied]).sort("category_name")
+
+    print(f"  translations in source:     {source.height:>8}")
+    print(f"  supplied here (ADR 0012):   {supplied.height:>8}")
+
+    truncate(session, CategoryTranslation)
+    written = write_frame(session, CategoryTranslation, translations)
     print(f"  written:                    {written:>8}")
