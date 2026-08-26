@@ -192,12 +192,6 @@ def transform_persons(session: Session) -> None:
     print(f"  written:                    {written:>8}")
 
 
-MISSING_TRANSLATIONS = {
-    "pc_gamer": "pc_gamer",
-    "portateis_cozinha_e_preparadores_de_alimentos": "kitchen_portables_and_food_preparers",
-}
-
-
 def transform_category_translation(session: Session) -> None:
     """Copy the category translations, completing the two the source omits.
 

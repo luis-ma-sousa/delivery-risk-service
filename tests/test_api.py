@@ -59,3 +59,19 @@ def test_predict_rejects_an_order_with_no_items() -> None:
     response = client.post("/predict", json=request)
 
     assert response.status_code == 422
+
+
+def test_predict_rejects_an_unknown_field() -> None:
+    request = VALID_REQUEST | {"delivered_customer_date": "2018-03-20T00:00:00"}
+
+    response = client.post("/predict", json=request)
+
+    assert response.status_code == 422
+
+
+def test_predict_rejects_an_estimate_before_the_purchase() -> None:
+    request = VALID_REQUEST | {"estimated_delivery_date": "2018-03-01T00:00:00"}
+
+    response = client.post("/predict", json=request)
+
+    assert response.status_code == 422

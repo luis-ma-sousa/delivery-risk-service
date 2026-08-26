@@ -7,7 +7,9 @@ HTTP service.
 ## Status
 
 The data layer is complete: ingestion, schema and transformation. The service
-and the model are not yet built.
+runs with a constant model behind the prediction interface — the HTTP contract
+is settled before any model exists, so the model can be swapped without
+touching the API. Feature extraction and the trained model are not yet built.
 
 ## Data
 
@@ -57,6 +59,13 @@ Requires Docker and [uv](https://docs.astral.sh/uv/).
     uv run python scripts/recon.py      # profile the source files
     uv run python scripts/load_raw.py   # CSVs into raw
     uv run python scripts/transform.py  # raw into curated
+
+## Running the service
+
+    docker compose up -d
+    uv run uvicorn delivery_risk.api.app:app --reload
+
+Interactive documentation is at http://127.0.0.1:8000/docs
 
 ## Development
 
