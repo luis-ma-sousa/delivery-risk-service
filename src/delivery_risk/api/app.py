@@ -12,7 +12,7 @@ from delivery_risk.prediction import ConstantModel, RiskModel
 app = FastAPI(
     title="Delivery Risk Service",
     description=(
-        "Predicts the probability that an order is delivered after its " "estimated delivery date."
+        "Predicts the probability that an order is delivered after its estimated delivery date."
     ),
     version="0.1.0",
 )
