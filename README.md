@@ -14,7 +14,7 @@ touching the API. Feature extraction and the trained model are not yet built.
 ## Data
 
 Source: Brazilian E-Commerce Public Dataset by Olist
-https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+<https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce>
 
 Download requires a Kaggle account. Extract all nine CSVs into `data/raw/`:
 
@@ -65,7 +65,7 @@ Requires Docker and [uv](https://docs.astral.sh/uv/).
     docker compose up -d
     uv run uvicorn delivery_risk.api.app:app --reload
 
-Interactive documentation is at http://127.0.0.1:8000/docs
+Interactive documentation is at <http://127.0.0.1:8000/docs>
 
 ## Development
 
