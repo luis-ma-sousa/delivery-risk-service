@@ -72,6 +72,19 @@ def truncate(session: Session, model: type[Base]) -> None:
     session.execute(text(f"TRUNCATE TABLE {table.schema}.{table.name} CASCADE"))
 
 
+def within_brazil(frame: pl.DataFrame, lat: str, lng: str) -> pl.DataFrame:
+    """Keep only rows whose coordinates fall inside the Brazil bounding box.
+
+    The filter is deliberately coarse. The errors it catches are thousands of
+    kilometres out, not marginal, so a true polygon would add a geometry
+    dependency to catch perhaps one or two additional rows (ADR 0003).
+    """
+    return frame.filter(
+        pl.col(lat).is_between(BRAZIL_BOUNDS["lat_min"], BRAZIL_BOUNDS["lat_max"])
+        & pl.col(lng).is_between(BRAZIL_BOUNDS["lng_min"], BRAZIL_BOUNDS["lng_max"])
+    )
+
+
 def transform_zip_code_locations(session: Session) -> None:
     """Collapse the geolocation catalogue to one coordinate per prefix.
 
@@ -98,10 +111,7 @@ def transform_zip_code_locations(session: Session) -> None:
     )
     unparseable = parsed.filter(pl.col("lat").is_null() | pl.col("lng").is_null()).height
 
-    inside = parsed.filter(
-        pl.col("lat").is_between(BRAZIL_BOUNDS["lat_min"], BRAZIL_BOUNDS["lat_max"])
-        & pl.col("lng").is_between(BRAZIL_BOUNDS["lng_min"], BRAZIL_BOUNDS["lng_max"])
-    )
+    inside = within_brazil(parsed, "lat", "lng")
 
     prefixes_before = geo["zip_code_prefix"].n_unique()
 
