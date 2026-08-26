@@ -85,6 +85,28 @@ def within_brazil(frame: pl.DataFrame, lat: str, lng: str) -> pl.DataFrame:
     )
 
 
+def without_contradictions(frame: pl.DataFrame) -> pl.DataFrame:
+    """Drop orders that contradict themselves (ADR 0013).
+
+    Two groups are removed: deliveries recorded before despatch, which are
+    physically impossible, and cancelled orders carrying a delivery date,
+    where the final status and the delivery record disagree.
+
+    A missing timestamp is not a contradiction. An order still in transit has
+    no delivery date, and that is expected.
+    """
+    delivery_order_is_not_contradictory = (
+        pl.col("delivered_customer_date").is_null()
+        | pl.col("delivered_carrier_date").is_null()
+        | (pl.col("delivered_customer_date") >= pl.col("delivered_carrier_date"))
+    )
+    cancelled_but_delivered = (pl.col("status") == "canceled") & pl.col(
+        "delivered_customer_date"
+    ).is_not_null()
+
+    return frame.filter(delivery_order_is_not_contradictory & ~cancelled_but_delivered)
+
+
 def transform_zip_code_locations(session: Session) -> None:
     """Collapse the geolocation catalogue to one coordinate per prefix.
 
@@ -388,14 +410,7 @@ def transform_orders(session: Session) -> None:
         (pl.col("status") == "canceled") & pl.col("delivered_customer_date").is_not_null()
     ).height
 
-    kept = aware.filter(
-        (
-            pl.col("delivered_customer_date").is_null()
-            | pl.col("delivered_carrier_date").is_null()
-            | (pl.col("delivered_customer_date") >= pl.col("delivered_carrier_date"))
-        )
-        & ~((pl.col("status") == "canceled") & pl.col("delivered_customer_date").is_not_null())
-    )
+    kept = without_contradictions(aware)
 
     print(f"  source rows:                {orders.height:>8}")
     print(f"  timestamps unparseable:     {unparseable:>8}")
