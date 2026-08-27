@@ -1,11 +1,12 @@
 """Database connection and session management.
 
-The engine is created once and shared; sessions are created per unit of work.
-Configuration comes from the environment, never from code, so the same module
-serves local development, tests and deployment.
+The engine is created on first use rather than at import, so importing this
+module — or anything that depends on it — does not require configuration to be
+present. A test that never touches the database should not need a database URL.
 """
 
 import os
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from sqlalchemy import Engine, create_engine
@@ -22,11 +23,12 @@ def get_database_url() -> str:
     return url
 
 
-engine: Engine = create_engine(get_database_url())
-
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+@lru_cache(maxsize=1)
+def get_engine() -> Engine:
+    """Return the shared engine, creating it on first use."""
+    return create_engine(get_database_url())
 
 
 def get_session() -> Session:
     """Create a new session bound to the shared engine."""
-    return SessionLocal()
+    return sessionmaker(bind=get_engine(), expire_on_commit=False)()
