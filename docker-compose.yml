@@ -16,5 +16,16 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build: .
+    container_name: delivery-risk-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://delivery:delivery@db:5432/delivery_risk
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
