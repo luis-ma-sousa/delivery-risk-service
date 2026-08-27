@@ -18,7 +18,7 @@ VALID_REQUEST = {
     "items": [
         {
             "product_id": "abc123",
-            "seller_id": "3442f8959a84dea7ee197c632cb2df15",
+            "seller_id": "seller-with-location",
             "price": 109.90,
             "freight_value": 20.00,
         }
@@ -26,7 +26,7 @@ VALID_REQUEST = {
 }
 
 
-def test_predict_returns_a_probability() -> None:
+def test_predict_returns_a_probability(postgres_url: str) -> None:
     response = client.post("/predict", json=VALID_REQUEST)
 
     assert response.status_code == 200
@@ -35,7 +35,7 @@ def test_predict_returns_a_probability() -> None:
     assert body["model_version"] == "constant-0.1.0"
 
 
-def test_predict_accepts_several_payments() -> None:
+def test_predict_accepts_several_payments(postgres_url: str) -> None:
     request = VALID_REQUEST | {
         "payments": [
             {"payment_type": "voucher", "installments": 1, "value": 29.90},
@@ -48,7 +48,7 @@ def test_predict_accepts_several_payments() -> None:
     assert response.status_code == 200
 
 
-def test_predict_accepts_offsets_from_different_timezones() -> None:
+def test_predict_accepts_offsets_from_different_timezones(postgres_url: str) -> None:
     request = VALID_REQUEST | {
         "purchase_timestamp": "2018-03-15T14:30:00-03:00",
         "estimated_delivery_date": "2018-03-28T00:00:00Z",
