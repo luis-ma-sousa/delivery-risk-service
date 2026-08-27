@@ -25,6 +25,16 @@ class OrderLine(BaseModel):
     freight_value: Decimal = Field(ge=0)
 
 
+class PaymentLine(BaseModel):
+    """One payment against an order, as recorded at checkout."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    payment_type: PaymentType
+    installments: int = Field(ge=0)
+    value: Decimal = Field(ge=0)
+
+
 class PredictionRequest(BaseModel):
     """An order at the moment it is placed.
 
@@ -39,6 +49,10 @@ class PredictionRequest(BaseModel):
     Timestamps must carry an offset. The service does not guess a timezone for
     a caller that omits one: unlike the CSV ingestion, where the source cannot
     be asked, a caller knows its own timezone and can say so.
+
+    Payments are a list: 3% of orders carry more than one, typically vouchers
+    covering part of the total alongside a card. Whether that matters is for
+    the feature layer to decide; the contract records what the caller has.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -46,9 +60,7 @@ class PredictionRequest(BaseModel):
     purchase_timestamp: AwareDatetime
     estimated_delivery_date: AwareDatetime
     customer_zip_code_prefix: str = Field(min_length=1, max_length=8)
-    payment_type: PaymentType
-    payment_installments: int = Field(ge=0)
-    payment_value: Decimal = Field(ge=0)
+    payments: list[PaymentLine] = Field(min_length=1)
     items: list[OrderLine] = Field(min_length=1)
 
     @model_validator(mode="after")

@@ -14,9 +14,7 @@ VALID_REQUEST = {
     "purchase_timestamp": "2018-03-15T14:30:00-03:00",
     "estimated_delivery_date": "2018-03-28T00:00:00-03:00",
     "customer_zip_code_prefix": "01001",
-    "payment_type": "boleto",
-    "payment_installments": 1,
-    "payment_value": 129.90,
+    "payments": [{"payment_type": "boleto", "installments": 1, "value": 129.90}],
     "items": [
         {
             "product_id": "abc123",
@@ -46,11 +44,26 @@ def test_predict_returns_a_probability() -> None:
 
 
 def test_predict_rejects_an_unknown_payment_type() -> None:
-    request = VALID_REQUEST | {"payment_type": "dinheiro"}
+    request = VALID_REQUEST | {
+        "payments": [{"payment_type": "dinheiro", "installments": 1, "value": 10}]
+    }
 
     response = client.post("/predict", json=request)
 
     assert response.status_code == 422
+
+
+def test_predict_accepts_several_payments() -> None:
+    request = VALID_REQUEST | {
+        "payments": [
+            {"payment_type": "voucher", "installments": 1, "value": 29.90},
+            {"payment_type": "credit_card", "installments": 3, "value": 100.00},
+        ]
+    }
+
+    response = client.post("/predict", json=request)
+
+    assert response.status_code == 200
 
 
 def test_predict_rejects_an_order_with_no_items() -> None:
