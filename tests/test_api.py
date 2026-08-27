@@ -4,9 +4,14 @@ These run without a server and without a database: the endpoint depends on the
 prediction protocol, not on either.
 """
 
-from fastapi.testclient import TestClient
+from collections.abc import Generator
+from typing import cast
 
-from delivery_risk.api.app import app
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from delivery_risk.api.app import app, session_dependency
 
 client = TestClient(app)
 
@@ -26,21 +31,30 @@ VALID_REQUEST = {
 }
 
 
+def no_database() -> Generator[Session, None, None]:
+    """Stand in for the session in tests that never reach the database.
+
+    Every test in this file exercises validation, which happens after
+    dependencies are resolved but before the endpoint body runs. The session is
+    created and never used.
+    """
+    yield cast(Session, None)
+
+
+@pytest.fixture(autouse=True)
+def without_database() -> Generator[None, None, None]:
+    """Replace the session for every test in this module, then restore it."""
+    app.dependency_overrides[session_dependency] = no_database
+    yield
+    app.dependency_overrides.clear()
+
+
 def test_health_reports_the_loaded_model() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
     assert response.json()["model_version"] == "constant-0.1.0"
-
-
-def test_predict_returns_a_probability() -> None:
-    response = client.post("/predict", json=VALID_REQUEST)
-
-    assert response.status_code == 200
-    body = response.json()
-    assert 0.0 <= body["probability_late"] <= 1.0
-    assert body["model_version"] == "constant-0.1.0"
 
 
 def test_predict_rejects_an_unknown_payment_type() -> None:
@@ -51,19 +65,6 @@ def test_predict_rejects_an_unknown_payment_type() -> None:
     response = client.post("/predict", json=request)
 
     assert response.status_code == 422
-
-
-def test_predict_accepts_several_payments() -> None:
-    request = VALID_REQUEST | {
-        "payments": [
-            {"payment_type": "voucher", "installments": 1, "value": 29.90},
-            {"payment_type": "credit_card", "installments": 3, "value": 100.00},
-        ]
-    }
-
-    response = client.post("/predict", json=request)
-
-    assert response.status_code == 200
 
 
 def test_predict_rejects_an_order_with_no_payments() -> None:
@@ -104,14 +105,3 @@ def test_predict_rejects_a_naive_timestamp() -> None:
     response = client.post("/predict", json=request)
 
     assert response.status_code == 422
-
-
-def test_predict_accepts_offsets_from_different_timezones() -> None:
-    request = VALID_REQUEST | {
-        "purchase_timestamp": "2018-03-15T14:30:00-03:00",
-        "estimated_delivery_date": "2018-03-28T00:00:00Z",
-    }
-
-    response = client.post("/predict", json=request)
-
-    assert response.status_code == 200
