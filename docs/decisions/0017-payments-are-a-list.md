@@ -46,6 +46,8 @@ later, but this is inferred from the data rather than established.
 ## Consequences
 
 - A caller with a single payment sends a list of one.
-- Fields inside `PaymentLine` drop the `payment_` prefix, per ADR 0011.
+- Fields inside `PaymentLine` drop the redundant `payment_` prefix, per ADR
+  0011, except `payment_type` itself: the alternative, `type`, shadows a
+  Python builtin and says less.
 - The feature layer can derive payment count, distinct methods, voucher share
   and total value without a contract change.
