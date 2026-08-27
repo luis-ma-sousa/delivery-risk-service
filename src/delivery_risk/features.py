@@ -142,4 +142,8 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
             request.purchase_timestamp, request.estimated_delivery_date
         ),
         "item_count": float(len(request.items)),
+        "total_freight": float(sum(item.freight_value for item in request.items)),
+        "total_price": float(sum(item.price for item in request.items)),
+        "purchase_day_of_week": float(request.purchase_timestamp.weekday()),
+        "purchase_hour": float(request.purchase_timestamp.hour),
     }
