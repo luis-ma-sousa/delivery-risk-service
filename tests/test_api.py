@@ -11,8 +11,8 @@ from delivery_risk.api.app import app
 client = TestClient(app)
 
 VALID_REQUEST = {
-    "purchase_timestamp": "2018-03-15T14:30:00",
-    "estimated_delivery_date": "2018-03-28T00:00:00",
+    "purchase_timestamp": "2018-03-15T14:30:00-03:00",
+    "estimated_delivery_date": "2018-03-28T00:00:00-03:00",
     "customer_zip_code_prefix": "01001",
     "payment_type": "boleto",
     "payment_installments": 1,
@@ -75,3 +75,22 @@ def test_predict_rejects_an_estimate_before_the_purchase() -> None:
     response = client.post("/predict", json=request)
 
     assert response.status_code == 422
+
+
+def test_predict_rejects_a_naive_timestamp() -> None:
+    request = VALID_REQUEST | {"purchase_timestamp": "2018-03-15T14:30:00"}
+
+    response = client.post("/predict", json=request)
+
+    assert response.status_code == 422
+
+
+def test_predict_accepts_offsets_from_different_timezones() -> None:
+    request = VALID_REQUEST | {
+        "purchase_timestamp": "2018-03-15T14:30:00-03:00",
+        "estimated_delivery_date": "2018-03-28T00:00:00Z",
+    }
+
+    response = client.post("/predict", json=request)
+
+    assert response.status_code == 200
