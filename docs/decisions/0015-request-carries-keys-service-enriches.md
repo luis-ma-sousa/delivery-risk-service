@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-26
+**Amended by:** ADR 0017, which replaces the single payment fields with a list.
 
 ## Context
 

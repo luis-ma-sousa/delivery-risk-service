@@ -16,10 +16,8 @@ no boletos at all. The order with 29 payments is 29 vouchers, ranging from
 R$0.32 to R$150.00. The pattern is accumulated credit covering part of a total,
 with a card settling the rest — not an instalment plan.
 
-Measured against the target, it does not predict lateness: orders with multiple
-payments are late 7.3% of the time against 8.1% for the rest, a difference of
-under a percentage point on 2874 orders. Redeeming vouchers is instantaneous
-and touches no part of the logistics chain, so this is what one would expect.
+Measured against the target, it shows little marginal association with
+lateness: orders with multiple payments are late 7.3% of the time against 8.1% for the rest, a difference of under a percentage point on 2874 orders. Redeeming vouchers is instantaneous and touches no part of the logistics chain, so this is what one would expect.
 
 ## Decision
 

@@ -66,6 +66,14 @@ def test_predict_accepts_several_payments() -> None:
     assert response.status_code == 200
 
 
+def test_predict_rejects_an_order_with_no_payments() -> None:
+    request = VALID_REQUEST | {"payments": []}
+
+    response = client.post("/predict", json=request)
+
+    assert response.status_code == 422
+
+
 def test_predict_rejects_an_order_with_no_items() -> None:
     request = VALID_REQUEST | {"items": []}
 
@@ -83,7 +91,7 @@ def test_predict_rejects_an_unknown_field() -> None:
 
 
 def test_predict_rejects_an_estimate_before_the_purchase() -> None:
-    request = VALID_REQUEST | {"estimated_delivery_date": "2018-03-01T00:00:00"}
+    request = VALID_REQUEST | {"estimated_delivery_date": "2018-03-01T00:00:00-03:00"}
 
     response = client.post("/predict", json=request)
 
