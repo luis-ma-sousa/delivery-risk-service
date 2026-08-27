@@ -62,7 +62,13 @@ Requires Docker and [uv](https://docs.astral.sh/uv/).
 
 ## Running the service
 
-    docker compose up -d
+Everything, in containers:
+
+    docker compose up -d --build
+
+Or the API locally against the containerised database, with reload:
+
+    docker compose up -d db
     uv run uvicorn delivery_risk.api.app:app --reload
 
 Interactive documentation is at <http://127.0.0.1:8000/docs>
