@@ -1,6 +1,6 @@
 """Tests for feature computation."""
 
-from delivery_risk.features import haversine_km
+from delivery_risk.features import distance_km, haversine_km
 
 
 def test_distance_between_a_point_and_itself_is_zero() -> None:
@@ -30,3 +30,34 @@ def test_longitude_shrinks_away_from_the_equator() -> None:
     far_south = haversine_km(-60.0, 0.0, -60.0, 1.0)
 
     assert far_south < at_equator / 1.5
+
+
+def test_distance_to_a_single_seller() -> None:
+    sao_paulo = (-23.55, -46.63)
+    rio = (-22.91, -43.17)
+
+    assert distance_km(sao_paulo, [rio]) == haversine_km(-23.55, -46.63, -22.91, -43.17)
+
+
+def test_distance_uses_the_furthest_seller() -> None:
+    sao_paulo = (-23.55, -46.63)
+    campinas = (-22.90, -47.06)
+    rio = (-22.91, -43.17)
+
+    with_both = distance_km(sao_paulo, [campinas, rio])
+    rio_only = distance_km(sao_paulo, [rio])
+
+    assert with_both == rio_only
+
+
+def test_distance_is_unknown_when_a_seller_has_no_location() -> None:
+    sao_paulo = (-23.55, -46.63)
+    rio = (-22.91, -43.17)
+
+    assert distance_km(sao_paulo, [rio, None]) is None
+
+
+def test_distance_is_unknown_when_the_customer_has_no_location() -> None:
+    rio = (-22.91, -43.17)
+
+    assert distance_km(None, [rio]) is None
