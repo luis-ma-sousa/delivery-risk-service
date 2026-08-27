@@ -49,24 +49,35 @@ def customer_location(session: Session, zip_code_prefix: str) -> tuple[float, fl
     return float(row.latitude), float(row.longitude)
 
 
-def seller_locations(session: Session, seller_ids: list[str]) -> dict[str, tuple[float, float]]:
-    """Return the coordinates of each seller, keyed by identifier.
+def seller_locations(
+    session: Session, seller_ids: list[str]
+) -> dict[str, tuple[float, float] | None]:
+    """Return the coordinates of each known seller, keyed by identifier.
 
-    Sellers whose postcode prefix is absent from the catalogue are omitted
-    rather than returned as null: seven sellers are in that position (ADR
-    0004), and their absence from the mapping is the answer.
+    The three possible outcomes are distinct and the caller needs to tell them
+    apart (ADR 0015):
+
+    - the key is absent: no such seller, which is a bad request
+    - the key maps to None: the seller exists but its postcode prefix is not
+      in the catalogue, which is expected for seven of them (ADR 0004)
+    - the key maps to coordinates: resolved
     """
     rows = session.execute(
         text(
             """
             SELECT s.seller_id, z.latitude, z.longitude
             FROM curated.sellers s
-            JOIN curated.zip_code_locations z
-              ON z.zip_code_prefix = s.zip_code_prefix
+            LEFT JOIN curated.zip_code_locations z
+                   ON z.zip_code_prefix = s.zip_code_prefix
             WHERE s.seller_id IN :ids
             """
         ).bindparams(bindparam("ids", expanding=True)),
         {"ids": list(seller_ids)},
     ).all()
 
-    return {row.seller_id: (float(row.latitude), float(row.longitude)) for row in rows}
+    return {
+        row.seller_id: (
+            None if row.latitude is None else (float(row.latitude), float(row.longitude))
+        )
+        for row in rows
+    }
