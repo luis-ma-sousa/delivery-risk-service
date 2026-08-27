@@ -1,3 +1,4 @@
+from datetime import datetime
 from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy import bindparam, text
@@ -111,6 +112,19 @@ def distance_km(
     )
 
 
+SECONDS_PER_DAY = 86400.0
+
+
+def estimated_slack_days(purchase: datetime, estimate: datetime) -> float:
+    """Days between the purchase and the delivery estimate.
+
+    Fractional rather than whole days: the estimate always falls at midnight,
+    so the fraction carries the hour of purchase, and whether that matters is
+    for the model to decide.
+    """
+    return (estimate - purchase).total_seconds() / SECONDS_PER_DAY
+
+
 def build_features(session: Session, request: PredictionRequest) -> dict[str, float | None]:
     """Turn a request into the features the model expects."""
 
@@ -122,4 +136,10 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
 
     distance = distance_km(customer, list(sellers.values()))
 
-    return {"distance_km": distance}
+    return {
+        "distance_km": distance,
+        "estimated_slack_days": estimated_slack_days(
+            request.purchase_timestamp, request.estimated_delivery_date
+        ),
+        "item_count": float(len(request.items)),
+    }
