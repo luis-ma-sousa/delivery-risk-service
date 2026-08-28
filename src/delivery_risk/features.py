@@ -1,5 +1,6 @@
 from datetime import datetime
 from math import asin, cos, radians, sin, sqrt
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
@@ -7,6 +8,8 @@ from sqlalchemy.orm import Session
 from delivery_risk.api.schemas import PredictionRequest
 
 EARTH_RADIUS_KM = 6371.0
+SECONDS_PER_DAY = 86400.0
+SAO_PAULO = ZoneInfo("America/Sao_Paulo")
 
 
 class UnknownSellerError(Exception):
@@ -125,9 +128,6 @@ def distance_km(
     )
 
 
-SECONDS_PER_DAY = 86400.0
-
-
 def estimated_slack_days(purchase: datetime, estimate: datetime) -> float:
     """Days between the purchase and the delivery estimate.
 
@@ -153,6 +153,8 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
 
     distance = distance_km(customer, list(sellers.values()))
 
+    local_purchase = request.purchase_timestamp.astimezone(SAO_PAULO)
+
     return {
         "distance_km": distance,
         "estimated_slack_days": estimated_slack_days(
@@ -161,6 +163,6 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
         "item_count": float(len(request.items)),
         "total_freight": float(sum(item.freight_value for item in request.items)),
         "total_price": float(sum(item.price for item in request.items)),
-        "purchase_day_of_week": float(request.purchase_timestamp.weekday()),
-        "purchase_hour": float(request.purchase_timestamp.hour),
+        "purchase_day_of_week": float(local_purchase.weekday()),
+        "purchase_hour": float(local_purchase.hour),
     }

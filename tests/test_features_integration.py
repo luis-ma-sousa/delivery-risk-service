@@ -41,3 +41,44 @@ def test_build_features_produces_every_feature(postgres_url: str) -> None:
     assert features["total_price"] == 100.0
     assert features["purchase_day_of_week"] == 3.0
     assert features["purchase_hour"] == 14.0
+
+
+def test_purchase_timing_does_not_depend_on_the_offset_sent(postgres_url: str) -> None:
+    """The same instant in two offsets must produce the same timing features.
+
+    14:30 in São Paulo and 17:30 UTC are the same moment. A caller elsewhere
+    would otherwise shift the order into a different hour and possibly a
+    different day.
+    """
+    items = [
+        {
+            "product_id": "abc123",
+            "seller_id": "seller-with-location",
+            "price": 100.00,
+            "freight_value": 20.00,
+        }
+    ]
+    payments = [{"payment_type": "boleto", "installments": 1, "value": 129.90}]
+
+    in_sao_paulo = PredictionRequest(
+        purchase_timestamp="2018-03-15T14:30:00-03:00",
+        estimated_delivery_date="2018-03-28T00:00:00-03:00",
+        customer_zip_code_prefix="01001",
+        payments=payments,
+        items=items,
+    )
+    in_utc = PredictionRequest(
+        purchase_timestamp="2018-03-15T17:30:00Z",
+        estimated_delivery_date="2018-03-28T03:00:00Z",
+        customer_zip_code_prefix="01001",
+        payments=payments,
+        items=items,
+    )
+
+    with get_session() as session:
+        local = build_features(session, in_sao_paulo)
+        utc = build_features(session, in_utc)
+
+    assert local["purchase_hour"] == utc["purchase_hour"] == 14.0
+    assert local["purchase_day_of_week"] == utc["purchase_day_of_week"] == 3.0
+    assert local["estimated_slack_days"] == utc["estimated_slack_days"]
