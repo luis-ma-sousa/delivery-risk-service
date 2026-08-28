@@ -9,6 +9,18 @@ from delivery_risk.api.schemas import PredictionRequest
 EARTH_RADIUS_KM = 6371.0
 
 
+class UnknownSellerError(Exception):
+    """Raised when a request names a seller the catalogue does not contain.
+
+    Distinct from a seller whose postcode has no coordinates, which is
+    expected and yields a null distance (ADR 0015).
+    """
+
+    def __init__(self, seller_ids: list[str]) -> None:
+        self.seller_ids = seller_ids
+        super().__init__(f"unknown sellers: {', '.join(seller_ids)}")
+
+
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Great-circle distance between two points, in kilometres.
 
@@ -65,6 +77,7 @@ def seller_locations(
       in the catalogue, which is expected for seven of them (ADR 0004)
     - the key maps to coordinates: resolved
     """
+
     rows = session.execute(
         text(
             """
@@ -133,6 +146,10 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
 
     customer = customer_location(session, prefix)
     sellers = seller_locations(session, seller_ids)
+
+    unknown = [seller_id for seller_id in seller_ids if seller_id not in sellers]
+    if unknown:
+        raise UnknownSellerError(unknown)
 
     distance = distance_km(customer, list(sellers.values()))
 

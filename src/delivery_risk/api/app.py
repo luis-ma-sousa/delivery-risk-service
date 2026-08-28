@@ -6,12 +6,12 @@ Swapping the constant model for a trained one changes nothing in this file.
 
 from collections.abc import Generator
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 
 from delivery_risk.api.schemas import PredictionRequest, PredictionResponse
 from delivery_risk.database import get_session
-from delivery_risk.features import build_features
+from delivery_risk.features import UnknownSellerError, build_features
 from delivery_risk.prediction import ConstantModel, RiskModel
 
 app = FastAPI(
@@ -49,9 +49,17 @@ def predict(
 
     Product attributes and coordinates are resolved from `curated` rather than
     taken from the caller (ADR 0015), so this endpoint reads the database on
-    every request.
+    every request. An identifier the catalogue does not contain is the
+    caller's error, not ours, and the response names it.
     """
-    features = build_features(session, request)
+    try:
+        features = build_features(session, request)
+    except UnknownSellerError as error:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "unknown seller", "seller_ids": error.seller_ids},
+        ) from error
+
     probability = model.predict_probability(features)
     return PredictionResponse(
         probability_late=probability,
