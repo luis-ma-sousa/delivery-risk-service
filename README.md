@@ -7,9 +7,10 @@ HTTP service.
 ## Status
 
 The data layer is complete: ingestion, schema and transformation. The service
-runs with a constant model behind the prediction interface — the HTTP contract
-is settled before any model exists, so the model can be swapped without
-touching the API. Feature extraction and the trained model are not yet built.
+runs end to end — it validates a request, resolves what the caller does not
+carry from `curated`, computes features, and answers through a prediction
+interface currently backed by a constant model. The trained model is not yet
+built.
 
 ## Data
 
@@ -44,6 +45,17 @@ training, of which 8.11% were delivered late.
 Every schema decision — which columns are nullable, which foreign keys can be
 enforced, which rows are excluded — is traceable to a measurement in
 `scripts/recon.py`, and recorded in `docs/decisions/`.
+
+## Features
+
+Seven features are computed per request: distance from the customer to the
+furthest seller, days of slack against the delivery estimate, item count,
+total price and freight, and the day of week and hour of purchase.
+
+Only information available when an order is placed may be used. The dataset
+records each order in its final state, so most of its columns describe the
+future relative to that moment; which ones are usable is settled in
+`docs/decisions/0014-prediction-point-and-feature-availability.md`.
 
 ## Setup
 
