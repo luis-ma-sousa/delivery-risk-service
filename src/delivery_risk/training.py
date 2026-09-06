@@ -62,3 +62,43 @@ def split_at(features: pl.DataFrame, cutoff: datetime, window_end: datetime) -> 
         (pl.col("purchase_timestamp") >= cutoff) & (pl.col("purchase_timestamp") < window_end)
     )
     return TemporalSplit(train=train, test=test, cutoff=cutoff, window_end=window_end)
+
+
+NUMERIC_FEATURES = [
+    "distance_km",
+    "estimated_slack_days",
+    "item_count",
+    "total_freight",
+    "total_price",
+    "total_weight_g",
+    "total_volume_cm3",
+    "purchase_day_of_week",
+    "purchase_hour",
+]
+
+NULLABLE_FEATURES = ["distance_km", "total_weight_g", "total_volume_cm3"]
+
+
+def prepare_matrix(train: pl.DataFrame, test: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Impute missing values and flag where they were missing.
+
+    Medians come from the training set and are applied to both. Computing them
+    over the combined data would leak information about the test period into
+    the model.
+
+    A missing distance is not a median distance, so the imputed value is
+    accompanied by an indicator. The model can then treat "unknown" as its own
+    condition rather than as an average order.
+    """
+    medians = {column: train[column].median() for column in NULLABLE_FEATURES}
+
+    def transform(frame: pl.DataFrame) -> pl.DataFrame:
+        return frame.with_columns(
+            [
+                pl.col(column).is_null().cast(pl.Float64).alias(f"{column}_missing")
+                for column in NULLABLE_FEATURES
+            ]
+            + [pl.col(column).fill_null(medians[column]) for column in NULLABLE_FEATURES]
+        ).select(NUMERIC_FEATURES + [f"{c}_missing" for c in NULLABLE_FEATURES])
+
+    return transform(train), transform(test)
