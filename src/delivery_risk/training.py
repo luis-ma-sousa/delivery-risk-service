@@ -1,15 +1,16 @@
-"""Training data preparation.
+"""Training data preparation and evaluation.
 
 Splits are temporal, never random. The late-delivery rate ranges from 1.4% to
 21.4% across months of this dataset, so a random split would let the model see
 orders from the same week it is being evaluated on, and learn a rate it could
-not know in advance.
+not know in advance (ADR 0019).
 """
 
 from datetime import datetime
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
+import mlflow
 import numpy as np
 import polars as pl
 from sklearn.linear_model import LogisticRegression
@@ -22,6 +23,20 @@ SAO_PAULO = ZoneInfo("America/Sao_Paulo")
 USABLE_FROM = datetime(2017, 1, 1, tzinfo=SAO_PAULO)
 USABLE_UNTIL = datetime(2018, 9, 1, tzinfo=SAO_PAULO)
 
+NUMERIC_FEATURES = [
+    "distance_km",
+    "estimated_slack_days",
+    "item_count",
+    "total_freight",
+    "total_price",
+    "total_weight_g",
+    "total_volume_cm3",
+    "purchase_day_of_week",
+    "purchase_hour",
+]
+
+NULLABLE_FEATURES = ["distance_km", "total_weight_g", "total_volume_cm3"]
+
 
 class TemporalSplit(NamedTuple):
     """Orders before a cutoff, and orders in the window after it."""
@@ -30,6 +45,24 @@ class TemporalSplit(NamedTuple):
     test: pl.DataFrame
     cutoff: datetime
     window_end: datetime
+
+
+class Evaluation(NamedTuple):
+    """How a set of predictions did on a test window."""
+
+    brier: float
+    auc: float | None
+    mean_predicted: float
+    observed_rate: float
+
+
+class ExperimentResult(NamedTuple):
+    """A model's performance on a window, and what a constant would have scored."""
+
+    model: Evaluation
+    baseline: Evaluation
+    train_orders: int
+    test_orders: int
 
 
 def usable_orders(features: pl.DataFrame) -> pl.DataFrame:
@@ -69,21 +102,6 @@ def split_at(features: pl.DataFrame, cutoff: datetime, window_end: datetime) -> 
     return TemporalSplit(train=train, test=test, cutoff=cutoff, window_end=window_end)
 
 
-NUMERIC_FEATURES = [
-    "distance_km",
-    "estimated_slack_days",
-    "item_count",
-    "total_freight",
-    "total_price",
-    "total_weight_g",
-    "total_volume_cm3",
-    "purchase_day_of_week",
-    "purchase_hour",
-]
-
-NULLABLE_FEATURES = ["distance_km", "total_weight_g", "total_volume_cm3"]
-
-
 def prepare_matrix(train: pl.DataFrame, test: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Impute missing values and flag where they were missing.
 
@@ -93,7 +111,7 @@ def prepare_matrix(train: pl.DataFrame, test: pl.DataFrame) -> tuple[pl.DataFram
 
     A missing distance is not a median distance, so the imputed value is
     accompanied by an indicator. The model can then treat "unknown" as its own
-    condition rather than as an average order.
+    condition rather than as an average order (ADR 0020).
     """
     medians = {column: train[column].median() for column in NULLABLE_FEATURES}
 
@@ -107,15 +125,6 @@ def prepare_matrix(train: pl.DataFrame, test: pl.DataFrame) -> tuple[pl.DataFram
         ).select(NUMERIC_FEATURES + [f"{c}_missing" for c in NULLABLE_FEATURES])
 
     return transform(train), transform(test)
-
-
-class Evaluation(NamedTuple):
-    """How a set of predictions did on a test window."""
-
-    brier: float
-    auc: float | None
-    mean_predicted: float
-    observed_rate: float
 
 
 def evaluate(predicted: np.ndarray, actual: np.ndarray) -> Evaluation:
@@ -160,3 +169,53 @@ def fit_logistic(features: pl.DataFrame, target: np.ndarray) -> Pipeline:
     )
     pipeline.fit(features.to_numpy(), target)
     return pipeline
+
+
+def run_experiment(
+    features: pl.DataFrame, cutoff: datetime, window_end: datetime
+) -> ExperimentResult:
+    """Train on everything before the cutoff and score the window after it.
+
+    Each call is one MLflow run. The baseline is logged alongside the model:
+    a Brier score means little on its own, and the number worth comparing
+    against is what a constant prediction of the training rate would have
+    scored on the same window.
+    """
+    split = split_at(features, cutoff, window_end)
+    x_train, x_test = prepare_matrix(split.train, split.test)
+    y_train = split.train["is_late"].to_numpy()
+    y_test = split.test["is_late"].to_numpy()
+
+    model = fit_logistic(x_train, y_train)
+    predicted = model.predict_proba(x_test.to_numpy())[:, 1]
+
+    result = evaluate(predicted, y_test)
+    baseline = evaluate(np.full(len(y_test), y_train.mean()), y_test)
+
+    with mlflow.start_run(run_name=cutoff.strftime("%Y-%m")):
+        mlflow.log_params(
+            {
+                "cutoff": cutoff.date().isoformat(),
+                "window_end": window_end.date().isoformat(),
+                "model": "logistic_regression",
+                "train_orders": split.train.height,
+                "test_orders": split.test.height,
+            }
+        )
+        mlflow.log_metrics(
+            {
+                "brier": result.brier,
+                "auc": result.auc if result.auc is not None else float("nan"),
+                "mean_predicted": result.mean_predicted,
+                "observed_rate": result.observed_rate,
+                "baseline_brier": baseline.brier,
+                "train_rate": float(y_train.mean()),
+            }
+        )
+
+    return ExperimentResult(
+        model=result,
+        baseline=baseline,
+        train_orders=split.train.height,
+        test_orders=split.test.height,
+    )

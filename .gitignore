@@ -18,7 +18,12 @@ recon_output.txt
 
 # macOS
 .DS_Store
+
+# Notebooks for looking at data
 notebooks/
 
 # Local configuration
 .env
+
+# MLflow tracking
+mlruns/
