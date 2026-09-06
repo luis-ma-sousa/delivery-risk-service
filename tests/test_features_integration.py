@@ -1,8 +1,10 @@
 """Feature extraction against a real database."""
 
+import polars as pl
+
 from delivery_risk.api.schemas import PredictionRequest
 from delivery_risk.database import get_session
-from delivery_risk.features import build_features
+from delivery_risk.features import build_features, build_training_features
 
 
 def test_build_features_produces_every_feature(postgres_url: str) -> None:
@@ -93,3 +95,41 @@ def test_purchase_timing_does_not_depend_on_the_offset_sent(postgres_url: str) -
     assert local["purchase_hour"] == utc["purchase_hour"] == 14.0
     assert local["purchase_day_of_week"] == utc["purchase_day_of_week"] == 3.0
     assert local["estimated_slack_days"] == utc["estimated_slack_days"]
+
+
+def test_batch_and_per_request_features_agree(postgres_url: str) -> None:
+    """The two feature implementations must produce the same values.
+
+    Training reads features in bulk from SQL; the service computes them per
+    request in Python. Nothing forces the two to agree, and if they drift the
+    model is served inputs it was not trained on — a failure that shows up as
+    degraded predictions rather than as an error.
+    """
+    request = PredictionRequest(
+        purchase_timestamp="2018-03-15T14:30:00-03:00",
+        estimated_delivery_date="2018-03-28T00:00:00-03:00",
+        customer_zip_code_prefix="01001",
+        customer_state="SP",
+        payments=[{"payment_type": "boleto", "installments": 1, "value": 129.90}],
+        items=[
+            {
+                "product_id": "product-with-attributes",
+                "seller_id": "seller-with-location",
+                "price": 100.00,
+                "freight_value": 20.00,
+            }
+        ],
+    )
+
+    with get_session() as session:
+        per_request = build_features(session, request)
+        batch = build_training_features(session)
+
+    row = batch.filter(pl.col("order_id") == "order-1").to_dicts()[0]
+
+    for name, expected in per_request.items():
+        actual = row[name]
+        if isinstance(expected, float) and isinstance(actual, float):
+            assert abs(actual - expected) < 1e-6, f"{name}: {actual} != {expected}"
+        else:
+            assert actual == expected, f"{name}: {actual} != {expected}"

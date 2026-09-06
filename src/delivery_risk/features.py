@@ -3,6 +3,7 @@ from math import asin, cos, radians, sin, sqrt
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
+import polars as pl
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
@@ -300,3 +301,87 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
         "customer_state": request.customer_state,
         "origin_state": origin_state(states, seller_ids),
     }
+
+
+TRAINING_FEATURES_QUERY = """
+SELECT
+    o.order_id,
+
+    CASE WHEN count(*) FILTER (WHERE zs.latitude IS NULL) > 0
+         THEN NULL
+         ELSE max(2 * 6371 * asin(sqrt(
+             sin(radians(zs.latitude - zc.latitude) / 2) ^ 2
+             + cos(radians(zc.latitude)) * cos(radians(zs.latitude))
+             * sin(radians(zs.longitude - zc.longitude) / 2) ^ 2
+         )))
+    END AS distance_km,
+
+    extract(epoch FROM o.estimated_delivery_date - o.purchase_timestamp) / 86400.0
+        AS estimated_slack_days,
+
+    count(*)                    AS item_count,
+    sum(i.freight_value)        AS total_freight,
+    sum(i.price)                AS total_price,
+
+    CASE WHEN count(*) FILTER (WHERE p.weight_g IS NULL) > 0
+         THEN NULL
+         ELSE sum(p.weight_g)
+    END AS total_weight_g,
+
+    CASE WHEN count(*) FILTER (
+             WHERE p.length_cm IS NULL OR p.height_cm IS NULL OR p.width_cm IS NULL
+         ) > 0
+         THEN NULL
+         ELSE sum(p.length_cm * p.height_cm * p.width_cm)
+    END AS total_volume_cm3,
+
+    extract(isodow FROM o.purchase_timestamp AT TIME ZONE 'America/Sao_Paulo') - 1
+        AS purchase_day_of_week,
+    extract(hour FROM o.purchase_timestamp AT TIME ZONE 'America/Sao_Paulo')
+        AS purchase_hour,
+
+    c.state AS customer_state,
+    CASE WHEN count(DISTINCT s.state) = 1 THEN min(s.state) END AS origin_state,
+
+    (o.delivered_customer_date > o.estimated_delivery_date) AS is_late
+
+FROM curated.orders o
+JOIN curated.customers c ON c.customer_id = o.customer_id
+JOIN curated.order_items i ON i.order_id = o.order_id
+JOIN curated.products p ON p.product_id = i.product_id
+JOIN curated.sellers s ON s.seller_id = i.seller_id
+LEFT JOIN curated.zip_code_locations zc ON zc.zip_code_prefix = c.zip_code_prefix
+LEFT JOIN curated.zip_code_locations zs ON zs.zip_code_prefix = s.zip_code_prefix
+WHERE o.status = 'delivered'
+  AND o.delivered_customer_date IS NOT NULL
+GROUP BY o.order_id, o.purchase_timestamp, o.estimated_delivery_date,
+         o.delivered_customer_date, c.state
+"""
+
+
+def build_training_features(session: Session) -> pl.DataFrame:
+    """Compute the same features as build_features, for every trainable order.
+
+    Per-request extraction issues four queries per order, which is not viable
+    for the ninety-six thousand orders in the training set. This produces the
+    same features in one pass, and carries the target alongside them.
+
+    Two implementations of one feature will drift. A test compares this output
+    against build_features for individual orders, so that drift fails rather
+    than silently changing what the model was trained on.
+    """
+    rows = session.execute(text(TRAINING_FEATURES_QUERY)).mappings().all()
+    numeric = [
+        "distance_km",
+        "estimated_slack_days",
+        "item_count",
+        "total_freight",
+        "total_price",
+        "total_weight_g",
+        "total_volume_cm3",
+        "purchase_day_of_week",
+        "purchase_hour",
+    ]
+    return pl.DataFrame([dict(row) for row in rows]).with_columns(
+        pl.col(column).cast(pl.Float64) for column in numeric
+    )

@@ -22,15 +22,35 @@ INSERT INTO curated.zip_code_locations (zip_code_prefix, latitude, longitude)
 VALUES ('01001', -23.550381, -46.634027),
        ('13010', -22.894561, -47.062380);
 
-INSERT INTO curated.sellers (seller_id, zip_code_prefix, city, state)
-VALUES ('seller-with-location', '13010', 'campinas', 'SP');
-
 INSERT INTO curated.category_translation (category_name, category_name_english)
 VALUES ('teste', 'test');
+
+INSERT INTO curated.persons (person_id) VALUES ('person-1');
+
+INSERT INTO curated.customers
+    (customer_id, person_id, zip_code_prefix, city, state)
+VALUES ('customer-1', 'person-1', '01001', 'sao paulo', 'SP');
+
+INSERT INTO curated.sellers (seller_id, zip_code_prefix, city, state)
+VALUES ('seller-with-location', '13010', 'campinas', 'SP');
 
 INSERT INTO curated.products
     (product_id, category_name, weight_g, length_cm, height_cm, width_cm)
 VALUES ('product-with-attributes', 'teste', 500, 20, 10, 15);
+
+INSERT INTO curated.orders
+    (order_id, customer_id, status, purchase_timestamp, approved_at,
+     delivered_carrier_date, delivered_customer_date, estimated_delivery_date)
+VALUES ('order-1', 'customer-1', 'delivered',
+        '2018-03-15 14:30:00-03', '2018-03-15 15:00:00-03',
+        '2018-03-16 09:00:00-03', '2018-03-20 11:00:00-03',
+        '2018-03-28 00:00:00-03');
+
+INSERT INTO curated.order_items
+    (order_id, order_item_id, product_id, seller_id, shipping_limit_date,
+     price, freight_value)
+VALUES ('order-1', 1, 'product-with-attributes', 'seller-with-location',
+        '2018-03-20 00:00:00-03', 100.00, 20.00);
 """
 
 
