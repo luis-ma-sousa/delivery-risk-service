@@ -6,8 +6,8 @@ orders from the same week it is being evaluated on, and learn a rate it could
 not know in advance (ADR 0019).
 """
 
-from datetime import datetime
-from typing import NamedTuple
+from datetime import datetime, timedelta
+from typing import NamedTuple, cast
 from zoneinfo import ZoneInfo
 
 import mlflow
@@ -36,6 +36,9 @@ NUMERIC_FEATURES = [
 ]
 
 NULLABLE_FEATURES = ["distance_km", "total_weight_g", "total_volume_cm3"]
+
+REFERENCE_LAG_DAYS = 30
+REFERENCE_WINDOW_DAYS = 30
 
 
 class TemporalSplit(NamedTuple):
@@ -169,6 +172,44 @@ def fit_logistic(features: pl.DataFrame, target: np.ndarray) -> Pipeline:
     )
     pipeline.fit(features.to_numpy(), target)
     return pipeline
+
+
+def reference_rate(features: pl.DataFrame, cutoff: datetime) -> float:
+    """The observed late rate over a window whose outcomes would be known.
+
+    Recalibrating on the weeks immediately before the cutoff would assume
+    knowledge nobody has: those orders are still in transit. Delivery takes a
+    median of 10 days and 23 at the ninetieth percentile, so a thirty-day lag
+    leaves roughly 95% of outcomes settled.
+
+    The 5% still open are the slowest, so this rate is slightly optimistic.
+    """
+    window_end = cutoff - timedelta(days=REFERENCE_LAG_DAYS)
+    window_start = window_end - timedelta(days=REFERENCE_WINDOW_DAYS)
+
+    window = features.filter(
+        (pl.col("purchase_timestamp") >= window_start) & (pl.col("purchase_timestamp") < window_end)
+    )
+    return float(cast(float, window["is_late"].mean()))
+
+
+def recalibrate(predicted: np.ndarray, target_rate: float) -> np.ndarray:
+    """Shift predictions so their mean matches a target rate.
+
+    The shift is a constant added in log-odds space, which moves every
+    probability in the same direction without changing their order. The model
+    ranks orders well and is wrong about the level; this corrects the level
+    and leaves the ranking untouched.
+    """
+    if target_rate <= 0 or target_rate >= 1:
+        return predicted
+
+    log_odds = np.log(predicted / (1 - predicted))
+    current = float(predicted.mean())
+    shift = np.log(target_rate / (1 - target_rate)) - np.log(current / (1 - current))
+
+    calibrated: np.ndarray = 1 / (1 + np.exp(-(log_odds + shift)))
+    return calibrated
 
 
 def run_experiment(

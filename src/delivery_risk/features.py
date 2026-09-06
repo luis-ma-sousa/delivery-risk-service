@@ -304,6 +304,23 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
 
 
 TRAINING_FEATURES_QUERY = """
+WITH daily_orders AS (
+    SELECT date_trunc('day', purchase_timestamp AT TIME ZONE 'America/Sao_Paulo') AS day,
+           count(*) AS orders
+    FROM curated.orders
+    GROUP BY day
+),
+daily_load AS (
+    SELECT d.day,
+           coalesce(sum(prev.orders) FILTER (WHERE prev.day > d.day - interval '7 days'), 0)
+               AS orders_last_7d,
+           coalesce(sum(prev.orders) FILTER (WHERE prev.day > d.day - interval '30 days'), 0)
+               AS orders_last_30d
+    FROM daily_orders d
+    LEFT JOIN daily_orders prev
+           ON prev.day < d.day AND prev.day > d.day - interval '30 days'
+    GROUP BY d.day
+)
 SELECT
     o.order_id,
     o.purchase_timestamp,
@@ -341,6 +358,9 @@ SELECT
     extract(hour FROM o.purchase_timestamp AT TIME ZONE 'America/Sao_Paulo')
         AS purchase_hour,
 
+    l.orders_last_7d,
+    l.orders_last_30d,
+
     c.state AS customer_state,
     CASE WHEN count(DISTINCT s.state) = 1 THEN min(s.state) END AS origin_state,
 
@@ -351,12 +371,15 @@ JOIN curated.customers c ON c.customer_id = o.customer_id
 JOIN curated.order_items i ON i.order_id = o.order_id
 JOIN curated.products p ON p.product_id = i.product_id
 JOIN curated.sellers s ON s.seller_id = i.seller_id
+JOIN daily_load l
+  ON l.day = date_trunc('day', o.purchase_timestamp AT TIME ZONE 'America/Sao_Paulo')
 LEFT JOIN curated.zip_code_locations zc ON zc.zip_code_prefix = c.zip_code_prefix
 LEFT JOIN curated.zip_code_locations zs ON zs.zip_code_prefix = s.zip_code_prefix
 WHERE o.status = 'delivered'
   AND o.delivered_customer_date IS NOT NULL
 GROUP BY o.order_id, o.purchase_timestamp, o.estimated_delivery_date,
-         o.delivered_customer_date, c.state
+         o.delivered_customer_date, c.state,
+         l.orders_last_7d, l.orders_last_30d
 """
 
 
@@ -382,6 +405,8 @@ def build_training_features(session: Session) -> pl.DataFrame:
         "total_volume_cm3",
         "purchase_day_of_week",
         "purchase_hour",
+        "orders_last_7d",
+        "orders_last_30d",
     ]
     return pl.DataFrame([dict(row) for row in rows]).with_columns(
         pl.col(column).cast(pl.Float64) for column in numeric
