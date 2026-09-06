@@ -13,7 +13,11 @@ from sqlalchemy.orm import Session
 
 from delivery_risk.api.schemas import PredictionRequest, PredictionResponse
 from delivery_risk.database import get_session
-from delivery_risk.features import UnknownSellerError, build_features
+from delivery_risk.features import (
+    UnknownProductError,
+    UnknownSellerError,
+    build_features,
+)
 from delivery_risk.prediction import ConstantModel, RiskModel, TrainedModel
 
 app = FastAPI(
@@ -74,6 +78,11 @@ def predict(
         raise HTTPException(
             status_code=422,
             detail={"error": "unknown seller", "seller_ids": error.seller_ids},
+        ) from error
+    except UnknownProductError as error:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "unknown product", "product_ids": error.product_ids},
         ) from error
 
     probability = model.predict_probability(features)

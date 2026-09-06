@@ -79,6 +79,24 @@ def test_predict_accepts_offsets_from_different_timezones(postgres_url: str) -> 
     assert response.status_code == 200
 
 
+def test_predict_rejects_an_unknown_product(postgres_url: str) -> None:
+    request = VALID_REQUEST | {
+        "items": [
+            {
+                "product_id": "no-such-product",
+                "seller_id": "seller-with-location",
+                "price": 109.90,
+                "freight_value": 20.00,
+            }
+        ]
+    }
+
+    response = client.post("/predict", json=request)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["product_ids"] == ["no-such-product"]
+
+
 def test_predict_rejects_an_unknown_seller(postgres_url: str) -> None:
     request = VALID_REQUEST | {
         "items": [

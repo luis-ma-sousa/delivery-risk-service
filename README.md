@@ -23,12 +23,13 @@ features, and answers with a probability.
 It ranks well and it does not know the level.
 
 Across six monthly test windows, each trained on everything before it, AUC
-sits between 0.68 and 0.76. An order it scores in the top decile really is
-riskier than one in the bottom.
+sits between 0.68 and 0.76 in five of them; in March 2018, the hardest window,
+it falls to 0.601. The ordering is informative: a higher predicted score
+corresponds to higher observed risk. How much higher was not quantified.
 
 The predicted rate moves between 7.4% and 11.7% while the observed rate moves
-between 1.4% and 21.4%. The model beats a constant baseline by 3% to 7% on
-Brier score, and loses to it in one window.
+between 1.4% and 21.4%. The model beats a constant baseline by 2% to 7% on
+Brier score in the windows where it wins, and loses to it in one.
 
 | window  | observed | predicted | brier   | baseline | auc   |
 |---------|----------|-----------|---------|----------|-------|
@@ -43,8 +44,8 @@ Three things were tried against this and none of them worked. System load
 features — orders placed in the preceding week and month — helped in the worst
 window and hurt four others. Recalibrating on recently observed rates fails
 because the previous month does not predict the next: 21.1% precedes 5.3%,
-8.4% precedes 1.4%. Gradient boosting is better in March and worse in the last
-three windows, degrading as its training set grows.
+8.4% precedes 1.4%. Gradient boosting, in the one configuration tested, is
+better in March and worse in the last three windows.
 
 Whatever drives the monthly swings is not in this dataset. The reasoning is in
 `docs/decisions/0021-the-level-of-risk-is-not-predictable.md`.

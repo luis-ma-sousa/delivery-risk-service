@@ -78,10 +78,13 @@ different question — what would happen if something were changed — and it
 requires the causes to be observed. Whatever drives March 2018 is not in this
 dataset.
 
-**A more expressive model.** Rejected on the measurement above. Gradient
-boosting does not fail because it is badly tuned; it fails because there is
-recent structure to overfit and that structure does not persist. Capacity is
-not the binding constraint.
+**A more expressive model.** Rejected on the measurement above. One
+configuration was tested — 200 iterations at a learning rate of 0.1 — and it
+did not improve consistently, so further complexity was not justified by the
+available evidence. Note also that training set size and test period move
+together across these windows, so the degradation cannot be attributed to
+either alone.
+
 
 ## Consequences
 
