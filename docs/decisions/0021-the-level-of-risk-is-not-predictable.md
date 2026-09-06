@@ -85,7 +85,6 @@ available evidence. Note also that training set size and test period move
 together across these windows, so the degradation cannot be attributed to
 either alone.
 
-
 ## Consequences
 
 - The predicted probability should be read as a ranking, not as a rate. An
