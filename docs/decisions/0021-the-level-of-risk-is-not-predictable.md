@@ -40,6 +40,25 @@ orders are still in transit — the reference is simply the previous month's
 rate, and that does not predict the next: 21.1% precedes 5.3%, 8.4% precedes
 1.4%, 4.6% precedes 10.4%.
 
+**A more expressive model.** Gradient boosting was run over the same windows
+and the same feature matrix:
+
+| window  | brier   | auc   | logistic brier | logistic auc |
+|---------|---------|-------|----------------|--------------|
+| 2018-03 | 0.17572 | 0.673 | 0.18061        | 0.601        |
+| 2018-04 | 0.05123 | 0.711 | 0.04907        | 0.756        |
+| 2018-05 | 0.07284 | 0.705 | 0.07269        | 0.707        |
+| 2018-06 | 0.01748 | 0.681 | 0.01753        | 0.729        |
+| 2018-07 | 0.05286 | 0.584 | 0.04734        | 0.685        |
+| 2018-08 | 0.09381 | 0.606 | 0.09177        | 0.683        |
+
+It is better in March, the hardest window, and worse in the last three, where
+its AUC falls to 0.584 and 0.606 and its Brier score in August is worse than
+the constant baseline. The degradation tracks training set size: the more
+history it is given, the worse it does on the month that follows. That is what
+overfitting to conditions which have since changed looks like. Logistic
+regression, being unable to find those patterns, generalises better.
+
 ## Decision
 
 The service predicts relative risk, not absolute probability. This is stated
@@ -58,6 +77,11 @@ to increase error as reduce it.
 different question — what would happen if something were changed — and it
 requires the causes to be observed. Whatever drives March 2018 is not in this
 dataset.
+
+**A more expressive model.** Rejected on the measurement above. Gradient
+boosting does not fail because it is badly tuned; it fails because there is
+recent structure to overfit and that structure does not persist. Capacity is
+not the binding constraint.
 
 ## Consequences
 

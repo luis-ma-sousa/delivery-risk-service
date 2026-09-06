@@ -6,13 +6,15 @@ orders from the same week it is being evaluated on, and learn a rate it could
 not know in advance (ADR 0019).
 """
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import NamedTuple, cast
+from typing import NamedTuple, Protocol, cast
 from zoneinfo import ZoneInfo
 
 import mlflow
 import numpy as np
 import polars as pl
+from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, roc_auc_score
 from sklearn.pipeline import Pipeline
@@ -89,6 +91,20 @@ def usable_orders(features: pl.DataFrame) -> pl.DataFrame:
         )
         .sort("purchase_timestamp")
     )
+
+
+class ProbabilityModel(Protocol):
+    """Anything that can be fitted and asked for class probabilities.
+
+    Both the logistic pipeline and the gradient boosting classifier satisfy
+    this without inheriting from it: scikit-learn's estimators share the
+    interface by convention, and the Protocol makes that convention checkable.
+    """
+
+    def predict_proba(self, x: np.ndarray) -> np.ndarray: ...
+
+
+ModelFitter = Callable[[pl.DataFrame, np.ndarray], ProbabilityModel]
 
 
 def split_at(features: pl.DataFrame, cutoff: datetime, window_end: datetime) -> TemporalSplit:
@@ -212,33 +228,58 @@ def recalibrate(predicted: np.ndarray, target_rate: float) -> np.ndarray:
     return calibrated
 
 
+def fit_gradient_boosting(
+    features: pl.DataFrame, target: np.ndarray
+) -> HistGradientBoostingClassifier:
+    """Fit a histogram-based gradient boosting classifier.
+
+    No scaling: tree splits are invariant to monotonic transformations of a
+    feature, so standardising would change nothing.
+
+    The same imputed matrix as the logistic regression is used, even though
+    this model handles missing values natively. Changing the model and the
+    preprocessing at once would leave it unclear which produced the
+    difference.
+    """
+    model = HistGradientBoostingClassifier(
+        max_iter=200,
+        learning_rate=0.1,
+        max_depth=None,
+        random_state=0,
+    )
+    model.fit(features.to_numpy(), target)
+    return model
+
+
 def run_experiment(
-    features: pl.DataFrame, cutoff: datetime, window_end: datetime
+    features: pl.DataFrame,
+    cutoff: datetime,
+    window_end: datetime,
+    fit: ModelFitter = fit_logistic,
+    model_name: str = "logistic_regression",
 ) -> ExperimentResult:
     """Train on everything before the cutoff and score the window after it.
 
-    Each call is one MLflow run. The baseline is logged alongside the model:
-    a Brier score means little on its own, and the number worth comparing
-    against is what a constant prediction of the training rate would have
-    scored on the same window.
+    The fitting function is a parameter rather than a branch: adding a model
+    means writing a function, not editing this one.
     """
     split = split_at(features, cutoff, window_end)
     x_train, x_test = prepare_matrix(split.train, split.test)
     y_train = split.train["is_late"].to_numpy()
     y_test = split.test["is_late"].to_numpy()
 
-    model = fit_logistic(x_train, y_train)
+    model = fit(x_train, y_train)
     predicted = model.predict_proba(x_test.to_numpy())[:, 1]
 
     result = evaluate(predicted, y_test)
     baseline = evaluate(np.full(len(y_test), y_train.mean()), y_test)
 
-    with mlflow.start_run(run_name=cutoff.strftime("%Y-%m")):
+    with mlflow.start_run(run_name=f"{cutoff.strftime('%Y-%m')}-{model_name}"):
         mlflow.log_params(
             {
                 "cutoff": cutoff.date().isoformat(),
                 "window_end": window_end.date().isoformat(),
-                "model": "logistic_regression",
+                "model": model_name,
                 "train_orders": split.train.height,
                 "test_orders": split.test.height,
             }

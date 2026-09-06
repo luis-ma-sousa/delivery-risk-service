@@ -17,7 +17,12 @@ import mlflow
 
 from delivery_risk.database import get_session
 from delivery_risk.features import build_training_features
-from delivery_risk.training import run_experiment, usable_orders
+from delivery_risk.training import (
+    fit_gradient_boosting,
+    fit_logistic,
+    run_experiment,
+    usable_orders,
+)
 
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
 
@@ -30,6 +35,11 @@ CUTOFFS = [
     (datetime(2018, 8, 1, tzinfo=SAO_PAULO), datetime(2018, 9, 1, tzinfo=SAO_PAULO)),
 ]
 
+MODELS = [
+    ("logistic_regression", fit_logistic),
+    ("gradient_boosting", fit_gradient_boosting),
+]
+
 
 def main() -> None:
     mlflow.set_experiment("delivery-risk-baseline")
@@ -37,24 +47,25 @@ def main() -> None:
     with get_session() as session:
         features = usable_orders(build_training_features(session))
 
-    print(
-        f"{'window':<9} {'train':>7} {'test':>6} {'observed':>9} "
-        f"{'predicted':>10} {'brier':>9} {'baseline':>9} {'auc':>6}"
-    )
-
-    for cutoff, window_end in CUTOFFS:
-        result = run_experiment(features, cutoff, window_end)
-        auc = f"{result.model.auc:.3f}" if result.model.auc is not None else "n/a"
+    for model_name, fit in MODELS:
+        print(f"\n=== {model_name} ===")
         print(
-            f"{cutoff.strftime('%Y-%m'):<9} "
-            f"{result.train_orders:>7} "
-            f"{result.test_orders:>6} "
-            f"{result.model.observed_rate:>9.1%} "
-            f"{result.model.mean_predicted:>10.1%} "
-            f"{result.model.brier:>9.5f} "
-            f"{result.baseline.brier:>9.5f} "
-            f"{auc:>6}"
+            f"{'window':<9} {'train':>7} {'test':>6} {'observed':>9} "
+            f"{'predicted':>10} {'brier':>9} {'baseline':>9} {'auc':>6}"
         )
+        for cutoff, window_end in CUTOFFS:
+            result = run_experiment(features, cutoff, window_end, fit, model_name)
+            auc = f"{result.model.auc:.3f}" if result.model.auc is not None else "n/a"
+            print(
+                f"{cutoff.strftime('%Y-%m'):<9} "
+                f"{result.train_orders:>7} "
+                f"{result.test_orders:>6} "
+                f"{result.model.observed_rate:>9.1%} "
+                f"{result.model.mean_predicted:>10.1%} "
+                f"{result.model.brier:>9.5f} "
+                f"{result.baseline.brier:>9.5f} "
+                f"{auc:>6}"
+            )
 
 
 if __name__ == "__main__":
