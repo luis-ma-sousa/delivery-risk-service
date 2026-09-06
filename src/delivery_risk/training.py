@@ -10,7 +10,12 @@ from datetime import datetime
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import polars as pl
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import brier_score_loss, roc_auc_score
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
 
@@ -102,3 +107,56 @@ def prepare_matrix(train: pl.DataFrame, test: pl.DataFrame) -> tuple[pl.DataFram
         ).select(NUMERIC_FEATURES + [f"{c}_missing" for c in NULLABLE_FEATURES])
 
     return transform(train), transform(test)
+
+
+class Evaluation(NamedTuple):
+    """How a set of predictions did on a test window."""
+
+    brier: float
+    auc: float | None
+    mean_predicted: float
+    observed_rate: float
+
+
+def evaluate(predicted: np.ndarray, actual: np.ndarray) -> Evaluation:
+    """Score predictions on discrimination and calibration separately.
+
+    Brier score measures calibration — whether the probabilities are right.
+    AUC measures discrimination — whether riskier orders are ranked above
+    safer ones. A model can rank well and be badly calibrated, which is the
+    expected outcome here: the late rate moves far more between months than
+    any feature explains.
+
+    AUC is undefined when every outcome in the window is the same, which is
+    why it may be None.
+    """
+    both_classes = len(set(actual)) > 1
+    return Evaluation(
+        brier=float(brier_score_loss(actual, predicted)),
+        auc=float(roc_auc_score(actual, predicted)) if both_classes else None,
+        mean_predicted=float(predicted.mean()),
+        observed_rate=float(actual.mean()),
+    )
+
+
+def fit_logistic(features: pl.DataFrame, target: np.ndarray) -> Pipeline:
+    """Fit a logistic regression on the prepared feature matrix.
+
+    Scaling is part of the pipeline rather than a separate step, so the
+    scaler is fitted on training data only and travels with the model. A
+    scaler fitted separately is one more thing that can be forgotten at
+    prediction time.
+
+    Classes are not balanced. Weighting the minority class upward improves
+    recall at a fixed threshold, but it does so by inflating every predicted
+    probability, and the probabilities are the output that matters here. If a
+    binary decision is needed, the threshold is chosen afterwards.
+    """
+    pipeline = Pipeline(
+        [
+            ("scale", StandardScaler()),
+            ("model", LogisticRegression(max_iter=1000)),
+        ]
+    )
+    pipeline.fit(features.to_numpy(), target)
+    return pipeline
