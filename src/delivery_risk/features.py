@@ -306,6 +306,7 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
 TRAINING_FEATURES_QUERY = """
 SELECT
     o.order_id,
+    o.purchase_timestamp,
 
     CASE WHEN count(*) FILTER (WHERE zs.latitude IS NULL) > 0
          THEN NULL
