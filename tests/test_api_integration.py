@@ -35,7 +35,7 @@ VALID_REQUEST = {
 def constant_model() -> Generator[None, None, None]:
     """Pin the model, so the result does not depend on local configuration.
 
-    Without this, whichever run MODEL_RUN_ID names in the developer's
+    Without this, whichever run MODEL_DIR names in the developer's
     environment decides what these tests assert.
     """
     import delivery_risk.api.app as app_module

@@ -27,3 +27,7 @@ notebooks/
 
 # MLflow tracking
 mlruns/
+mlflow.db
+
+# Models
+models/

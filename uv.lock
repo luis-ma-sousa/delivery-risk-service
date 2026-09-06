@@ -727,6 +727,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "fastapi" },
+    { name = "joblib" },
     { name = "mlflow" },
     { name = "polars" },
     { name = "psycopg", extra = ["binary"] },
@@ -751,6 +752,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.19.1" },
     { name = "fastapi", specifier = ">=0.141.1" },
+    { name = "joblib", specifier = ">=1.6.0" },
     { name = "mlflow", specifier = ">=3.16.0" },
     { name = "polars", specifier = ">=1.43.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },

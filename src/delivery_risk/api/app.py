@@ -6,6 +6,7 @@ Swapping the constant model for a trained one changes nothing in this file.
 
 import os
 from collections.abc import Generator
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
@@ -25,16 +26,16 @@ app = FastAPI(
 
 
 def load_model() -> RiskModel:
-    """Load the registered model if one is configured, or fall back.
+    """Load the model from disk if one is present, or fall back.
 
-    The service starts either way. A missing MODEL_RUN_ID is a deployment
-    that has not been given a model yet, not a fault, and `/health` reports
-    which one is loaded so the difference is visible rather than assumed.
+    The service starts either way. A missing model directory is a deployment
+    that has not been given one yet, not a fault, and `/health` reports which
+    is loaded so the difference is visible rather than assumed.
     """
-    run_id = os.environ.get("MODEL_RUN_ID")
-    if not run_id:
+    directory = Path(os.environ.get("MODEL_DIR", "models"))
+    if not (directory / "model.joblib").exists():
         return ConstantModel()
-    return TrainedModel(run_id)
+    return TrainedModel(directory)
 
 
 model: RiskModel = load_model()

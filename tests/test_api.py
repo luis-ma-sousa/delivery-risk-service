@@ -46,7 +46,7 @@ def no_database() -> Generator[Session, None, None]:
 def without_database() -> Generator[None, None, None]:
     """Replace the session and pin the model for every test in this module.
 
-    The model is pinned because it is otherwise whatever MODEL_RUN_ID happens
+    The model is pinned because it is otherwise whatever MODEL_DIR happens
     to name in the developer's environment. A test whose result depends on
     local configuration passes or fails for reasons that have nothing to do
     with the code.

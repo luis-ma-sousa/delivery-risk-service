@@ -6,10 +6,11 @@ that separation is what lets the skeleton be built and tested before any model
 exists.
 """
 
+import json
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-import mlflow
-import mlflow.sklearn
+import joblib
 import numpy as np
 
 
@@ -47,25 +48,25 @@ class ConstantModel:
 
 
 class TrainedModel:
-    """A model loaded from an MLflow run.
+    """A model loaded from a directory on disk.
 
-    The column order and imputation medians are read from the run rather than
-    assumed. Scikit-learn matches features by position, so a mismatch between
-    what the service computes and what the model expects would be silent: the
-    model would receive distance where it expects weight and would answer
-    confidently.
+    The column order and imputation medians are read from the metadata file
+    rather than assumed. Scikit-learn matches features by position, so a
+    mismatch between what the service computes and what the model expects
+    would be silent: the model would receive distance where it expects weight
+    and would answer confidently.
     """
 
-    def __init__(self, run_id: str) -> None:
-        self._run_id = run_id
-        self._model = mlflow.sklearn.load_model(f"runs:/{run_id}/model")
-        metadata = mlflow.artifacts.load_dict(f"runs:/{run_id}/feature_columns.json")
+    def __init__(self, directory: Path) -> None:
+        metadata = json.loads((directory / "model.json").read_text())
+        self._model = joblib.load(directory / "model.joblib")
         self._columns: list[str] = metadata["columns"]
         self._medians: dict[str, float] = metadata["medians"]
+        self._trained_through: str = metadata["trained_through"]
 
     @property
     def version(self) -> str:
-        return f"logistic-{self._run_id[:8]}"
+        return f"logistic-{self._trained_through}"
 
     def predict_probability(self, features: dict[str, float | str | None]) -> float:
         row: list[float] = []
@@ -78,6 +79,8 @@ class TrainedModel:
             value = features.get(column)
             if value is None:
                 row.append(self._medians[column])
+            elif isinstance(value, str):
+                row.append(0.0)
             else:
                 row.append(float(value))
 
