@@ -17,7 +17,7 @@ VALID_REQUEST = {
     "payments": [{"payment_type": "boleto", "installments": 1, "value": 129.90}],
     "items": [
         {
-            "product_id": "abc123",
+            "product_id": "product-with-attributes",
             "seller_id": "seller-with-location",
             "price": 109.90,
             "freight_value": 20.00,
@@ -63,7 +63,7 @@ def test_predict_rejects_an_unknown_seller(postgres_url: str) -> None:
     request = VALID_REQUEST | {
         "items": [
             {
-                "product_id": "abc123",
+                "product_id": "product-with-attributes",
                 "seller_id": "no-such-seller",
                 "price": 109.90,
                 "freight_value": 20.00,

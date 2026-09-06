@@ -13,7 +13,7 @@ def test_build_features_produces_every_feature(postgres_url: str) -> None:
         payments=[{"payment_type": "boleto", "installments": 1, "value": 129.90}],
         items=[
             {
-                "product_id": "abc123",
+                "product_id": "product-with-attributes",
                 "seller_id": "seller-with-location",
                 "price": 100.00,
                 "freight_value": 20.00,
@@ -30,6 +30,8 @@ def test_build_features_produces_every_feature(postgres_url: str) -> None:
         "item_count",
         "total_freight",
         "total_price",
+        "total_weight_g",
+        "total_volume_cm3",
         "purchase_day_of_week",
         "purchase_hour",
     }
@@ -41,6 +43,8 @@ def test_build_features_produces_every_feature(postgres_url: str) -> None:
     assert features["total_price"] == 100.0
     assert features["purchase_day_of_week"] == 3.0
     assert features["purchase_hour"] == 14.0
+    assert features["total_weight_g"] == 500.0
+    assert features["total_volume_cm3"] == 3000.0
 
 
 def test_purchase_timing_does_not_depend_on_the_offset_sent(postgres_url: str) -> None:
@@ -52,7 +56,7 @@ def test_purchase_timing_does_not_depend_on_the_offset_sent(postgres_url: str) -
     """
     items = [
         {
-            "product_id": "abc123",
+            "product_id": "product-with-attributes",
             "seller_id": "seller-with-location",
             "price": 100.00,
             "freight_value": 20.00,

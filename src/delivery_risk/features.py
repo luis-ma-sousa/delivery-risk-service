@@ -1,5 +1,6 @@
 from datetime import datetime
 from math import asin, cos, radians, sin, sqrt
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import bindparam, text
@@ -22,6 +23,14 @@ class UnknownSellerError(Exception):
     def __init__(self, seller_ids: list[str]) -> None:
         self.seller_ids = seller_ids
         super().__init__(f"unknown sellers: {', '.join(seller_ids)}")
+
+
+class UnknownProductError(Exception):
+    """Raised when a request names a product the catalogue does not contain."""
+
+    def __init__(self, product_ids: list[str]) -> None:
+        self.product_ids = product_ids
+        super().__init__(f"unknown products: {', '.join(product_ids)}")
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -102,6 +111,51 @@ def seller_locations(
     }
 
 
+class ProductAttributes(NamedTuple):
+    """The physical and descriptive attributes of a product.
+
+    Every field is optional: 610 products carry no descriptive metadata at all
+    and two have no dimensions. Their absence is preserved rather than filled,
+    since it may itself be informative.
+    """
+
+    weight_g: int | None
+    length_cm: int | None
+    height_cm: int | None
+    width_cm: int | None
+    category_name: str | None
+
+
+def product_attributes(session: Session, product_ids: list[str]) -> dict[str, ProductAttributes]:
+    """Return the attributes of each known product, keyed by identifier.
+
+    A product absent from the catalogue is absent from the result. As with
+    sellers, that is a bad request rather than a missing value (ADR 0015).
+    """
+    rows = session.execute(
+        text(
+            """
+            SELECT product_id, weight_g, length_cm, height_cm, width_cm,
+                   category_name
+            FROM curated.products
+            WHERE product_id IN :ids
+            """
+        ).bindparams(bindparam("ids", expanding=True)),
+        {"ids": list(product_ids)},
+    ).all()
+
+    return {
+        row.product_id: ProductAttributes(
+            weight_g=row.weight_g,
+            length_cm=row.length_cm,
+            height_cm=row.height_cm,
+            width_cm=row.width_cm,
+            category_name=row.category_name,
+        )
+        for row in rows
+    }
+
+
 def distance_km(
     customer: tuple[float, float] | None,
     sellers: list[tuple[float, float] | None],
@@ -138,31 +192,79 @@ def estimated_slack_days(purchase: datetime, estimate: datetime) -> float:
     return (estimate - purchase).total_seconds() / SECONDS_PER_DAY
 
 
-def build_features(session: Session, request: PredictionRequest) -> dict[str, float | None]:
-    """Turn a request into the features the model expects."""
+def total_weight_g(products: list[ProductAttributes]) -> float | None:
+    """Combined weight of every item, in grams.
 
+    None when any product has no recorded weight: a sum over the products that
+    happen to have one is not the weight of the order.
+    """
+    if not products:
+        return None
+    if any(product.weight_g is None for product in products):
+        return None
+
+    return float(sum(product.weight_g or 0 for product in products))
+
+
+def total_volume_cm3(products: list[ProductAttributes]) -> float | None:
+    """Combined volume of every item, in cubic centimetres.
+
+    Bounding-box volume, not the volume of the object: a mug and the box it
+    ships in occupy the same space in a van, and it is the van that matters.
+    """
+    if not products:
+        return None
+    if any(
+        product.length_cm is None or product.height_cm is None or product.width_cm is None
+        for product in products
+    ):
+        return None
+
+    return float(
+        sum(
+            (product.length_cm or 0) * (product.height_cm or 0) * (product.width_cm or 0)
+            for product in products
+        )
+    )
+
+
+def build_features(session: Session, request: PredictionRequest) -> dict[str, float | None]:
+    """Turn a request into the features the model expects.
+
+    Day of week and hour are taken in America/Sao_Paulo, not in whatever
+    offset the caller sent (ADR 0018). Sellers and products the catalogue does
+    not contain are the caller's error and are raised rather than skipped
+    (ADR 0015).
+    """
     prefix = request.customer_zip_code_prefix
     seller_ids = [item.seller_id for item in request.items]
+    product_ids = [item.product_id for item in request.items]
 
     customer = customer_location(session, prefix)
     sellers = seller_locations(session, seller_ids)
+    products = product_attributes(session, product_ids)
 
-    unknown = [seller_id for seller_id in seller_ids if seller_id not in sellers]
-    if unknown:
-        raise UnknownSellerError(unknown)
+    unknown_sellers = [seller_id for seller_id in seller_ids if seller_id not in sellers]
+    if unknown_sellers:
+        raise UnknownSellerError(unknown_sellers)
 
-    distance = distance_km(customer, list(sellers.values()))
+    unknown_products = [product_id for product_id in product_ids if product_id not in products]
+    if unknown_products:
+        raise UnknownProductError(unknown_products)
 
+    resolved_products = [products[product_id] for product_id in product_ids]
     local_purchase = request.purchase_timestamp.astimezone(SAO_PAULO)
 
     return {
-        "distance_km": distance,
+        "distance_km": distance_km(customer, list(sellers.values())),
         "estimated_slack_days": estimated_slack_days(
             request.purchase_timestamp, request.estimated_delivery_date
         ),
         "item_count": float(len(request.items)),
         "total_freight": float(sum(item.freight_value for item in request.items)),
         "total_price": float(sum(item.price for item in request.items)),
+        "total_weight_g": total_weight_g(resolved_products),
+        "total_volume_cm3": total_volume_cm3(resolved_products),
         "purchase_day_of_week": float(local_purchase.weekday()),
         "purchase_hour": float(local_purchase.hour),
     }

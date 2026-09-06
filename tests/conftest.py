@@ -24,6 +24,13 @@ VALUES ('01001', -23.550381, -46.634027),
 
 INSERT INTO curated.sellers (seller_id, zip_code_prefix, city, state)
 VALUES ('seller-with-location', '13010', 'campinas', 'SP');
+
+INSERT INTO curated.category_translation (category_name, category_name_english)
+VALUES ('teste', 'test');
+
+INSERT INTO curated.products
+    (product_id, category_name, weight_g, length_cm, height_cm, width_cm)
+VALUES ('product-with-attributes', 'teste', 500, 20, 10, 15);
 """
 
 
