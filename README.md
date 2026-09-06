@@ -6,11 +6,11 @@ HTTP service.
 
 ## Status
 
-The data layer is complete: ingestion, schema and transformation. The service
-runs end to end — it validates a request, resolves what the caller does not
-carry from `curated`, computes features, and answers through a prediction
-interface currently backed by a constant model. The trained model is not yet
-built.
+The data and service layers are complete. Orders are ingested, modelled and
+transformed; the API validates a request, resolves what the caller does not
+carry from `curated`, computes eleven features and answers through a
+prediction interface currently backed by a constant model. The trained model
+is not yet built.
 
 ## Data
 
@@ -40,7 +40,9 @@ from `raw` by an explicit transformation that reports every row it excludes
 and why.
 
 Of 99441 source orders, 99412 reach `curated`; 96447 are eligible for
-training, of which 8.11% were delivered late.
+training, of which 8.11% were delivered late. That rate is far from stable:
+it ranges from 1.4% in June 2018 to 21.4% in March 2018, which is why any
+train/test split must be temporal rather than random.
 
 Every schema decision — which columns are nullable, which foreign keys can be
 enforced, which rows are excluded — is traceable to a measurement in
@@ -48,21 +50,27 @@ enforced, which rows are excluded — is traceable to a measurement in
 
 ## Features
 
-Seven features are computed per request: distance from the customer to the
+Eleven features are computed per order: distance from the customer to the
 furthest seller, days of slack against the delivery estimate, item count,
-total price and freight, and the day of week and hour of purchase.
+total price, freight, weight and volume, day of week and hour of purchase,
+and the customer and origin states.
 
 Only information available when an order is placed may be used. The dataset
 records each order in its final state, so most of its columns describe the
 future relative to that moment; which ones are usable is settled in
 `docs/decisions/0014-prediction-point-and-feature-availability.md`.
 
+Features are computed twice: per request in Python for the service, and in
+bulk SQL for training. A test compares the two on the same order, so that any
+drift between them fails rather than silently changing what the model is
+served.
+
 ## Setup
 
 Requires Docker and [uv](https://docs.astral.sh/uv/).
 
     cp .env.example .env
-    docker compose up -d
+    docker compose up -d db
     uv sync
     uv run alembic upgrade head
 
@@ -90,6 +98,10 @@ Interactive documentation is at <http://127.0.0.1:8000/docs>
     uv run ruff format .
     uv run ruff check .
     uv run mypy src/
+    uv run pytest
+
+Integration tests start a throwaway Postgres through testcontainers, migrate
+it and seed it, so they need Docker but not a loaded database.
 
 ## Decisions
 
