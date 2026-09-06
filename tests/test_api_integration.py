@@ -14,6 +14,7 @@ VALID_REQUEST = {
     "purchase_timestamp": "2018-03-15T14:30:00-03:00",
     "estimated_delivery_date": "2018-03-28T00:00:00-03:00",
     "customer_zip_code_prefix": "01001",
+    "customer_state": "SP",
     "payments": [{"payment_type": "boleto", "installments": 1, "value": 129.90}],
     "items": [
         {

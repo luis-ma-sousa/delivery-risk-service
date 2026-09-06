@@ -18,7 +18,7 @@ class RiskModel(Protocol):
         """An identifier returned with every prediction it produces."""
         ...
 
-    def predict_probability(self, features: dict[str, float | None]) -> float:
+    def predict_probability(self, features: dict[str, float | str | None]) -> float:
         """Return the probability that the order is delivered late."""
         ...
 
@@ -38,5 +38,5 @@ class ConstantModel:
     def version(self) -> str:
         return "constant-0.1.0"
 
-    def predict_probability(self, features: dict[str, float | None]) -> float:
+    def predict_probability(self, features: dict[str, float | str | None]) -> float:
         return self._probability

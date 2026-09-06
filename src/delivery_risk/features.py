@@ -228,7 +228,36 @@ def total_volume_cm3(products: list[ProductAttributes]) -> float | None:
     )
 
 
-def build_features(session: Session, request: PredictionRequest) -> dict[str, float | None]:
+def seller_states(session: Session, seller_ids: list[str]) -> dict[str, str]:
+    """Return the state each seller despatches from, keyed by identifier."""
+    rows = session.execute(
+        text(
+            """
+            SELECT seller_id, state
+            FROM curated.sellers
+            WHERE seller_id IN :ids
+            """
+        ).bindparams(bindparam("ids", expanding=True)),
+        {"ids": list(seller_ids)},
+    ).all()
+
+    return {row.seller_id: row.state for row in rows}
+
+
+def origin_state(states: dict[str, str], seller_ids: list[str]) -> str | None:
+    """The state the order despatches from.
+
+    None when the order has sellers in more than one state: there is no single
+    origin, and picking one would assert something the data does not say. This
+    affects 1.3% of orders.
+    """
+    distinct = {states[seller_id] for seller_id in seller_ids if seller_id in states}
+    if len(distinct) != 1:
+        return None
+    return distinct.pop()
+
+
+def build_features(session: Session, request: PredictionRequest) -> dict[str, float | str | None]:
     """Turn a request into the features the model expects.
 
     Day of week and hour are taken in America/Sao_Paulo, not in whatever
@@ -243,6 +272,7 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
     customer = customer_location(session, prefix)
     sellers = seller_locations(session, seller_ids)
     products = product_attributes(session, product_ids)
+    states = seller_states(session, seller_ids)
 
     unknown_sellers = [seller_id for seller_id in seller_ids if seller_id not in sellers]
     if unknown_sellers:
@@ -267,4 +297,6 @@ def build_features(session: Session, request: PredictionRequest) -> dict[str, fl
         "total_volume_cm3": total_volume_cm3(resolved_products),
         "purchase_day_of_week": float(local_purchase.weekday()),
         "purchase_hour": float(local_purchase.hour),
+        "customer_state": request.customer_state,
+        "origin_state": origin_state(states, seller_ids),
     }

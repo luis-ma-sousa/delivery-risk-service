@@ -11,6 +11,7 @@ def test_build_features_produces_every_feature(postgres_url: str) -> None:
         estimated_delivery_date="2018-03-28T00:00:00-03:00",
         customer_zip_code_prefix="01001",
         payments=[{"payment_type": "boleto", "installments": 1, "value": 129.90}],
+        customer_state="SP",
         items=[
             {
                 "product_id": "product-with-attributes",
@@ -34,6 +35,8 @@ def test_build_features_produces_every_feature(postgres_url: str) -> None:
         "total_volume_cm3",
         "purchase_day_of_week",
         "purchase_hour",
+        "customer_state",
+        "origin_state",
     }
     assert features["distance_km"] is not None
     assert 84 < features["distance_km"] < 86
@@ -45,6 +48,8 @@ def test_build_features_produces_every_feature(postgres_url: str) -> None:
     assert features["purchase_hour"] == 14.0
     assert features["total_weight_g"] == 500.0
     assert features["total_volume_cm3"] == 3000.0
+    assert features["customer_state"] == "SP"
+    assert features["origin_state"] == "SP"
 
 
 def test_purchase_timing_does_not_depend_on_the_offset_sent(postgres_url: str) -> None:
@@ -68,6 +73,7 @@ def test_purchase_timing_does_not_depend_on_the_offset_sent(postgres_url: str) -
         purchase_timestamp="2018-03-15T14:30:00-03:00",
         estimated_delivery_date="2018-03-28T00:00:00-03:00",
         customer_zip_code_prefix="01001",
+        customer_state="SP",
         payments=payments,
         items=items,
     )
@@ -75,6 +81,7 @@ def test_purchase_timing_does_not_depend_on_the_offset_sent(postgres_url: str) -
         purchase_timestamp="2018-03-15T17:30:00Z",
         estimated_delivery_date="2018-03-28T03:00:00Z",
         customer_zip_code_prefix="01001",
+        customer_state="SP",
         payments=payments,
         items=items,
     )

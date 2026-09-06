@@ -60,6 +60,7 @@ class PredictionRequest(BaseModel):
     purchase_timestamp: AwareDatetime
     estimated_delivery_date: AwareDatetime
     customer_zip_code_prefix: str = Field(min_length=1, max_length=8)
+    customer_state: str = Field(min_length=2, max_length=2)
     payments: list[PaymentLine] = Field(min_length=1)
     items: list[OrderLine] = Field(min_length=1)
 
