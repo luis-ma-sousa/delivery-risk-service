@@ -4,9 +4,13 @@ Unlike test_api.py, these need a populated `curated` schema: the endpoint
 resolves coordinates on every request (ADR 0015).
 """
 
+from collections.abc import Generator
+
+import pytest
 from fastapi.testclient import TestClient
 
 from delivery_risk.api.app import app
+from delivery_risk.prediction import ConstantModel
 
 client = TestClient(app)
 
@@ -25,6 +29,21 @@ VALID_REQUEST = {
         }
     ],
 }
+
+
+@pytest.fixture(autouse=True)
+def constant_model() -> Generator[None, None, None]:
+    """Pin the model, so the result does not depend on local configuration.
+
+    Without this, whichever run MODEL_RUN_ID names in the developer's
+    environment decides what these tests assert.
+    """
+    import delivery_risk.api.app as app_module
+
+    original = app_module.model
+    app_module.model = ConstantModel()
+    yield
+    app_module.model = original
 
 
 def test_predict_returns_a_probability(postgres_url: str) -> None:

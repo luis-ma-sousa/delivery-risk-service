@@ -12,6 +12,7 @@ from typing import NamedTuple, Protocol, cast
 from zoneinfo import ZoneInfo
 
 import mlflow
+import mlflow.sklearn
 import numpy as np
 import polars as pl
 from sklearn.ensemble import HistGradientBoostingClassifier
@@ -41,6 +42,8 @@ NULLABLE_FEATURES = ["distance_km", "total_weight_g", "total_volume_cm3"]
 
 REFERENCE_LAG_DAYS = 30
 REFERENCE_WINDOW_DAYS = 30
+
+FEATURE_COLUMNS = NUMERIC_FEATURES + [f"{c}_missing" for c in NULLABLE_FEATURES]
 
 
 class TemporalSplit(NamedTuple):
@@ -249,6 +252,40 @@ def fit_gradient_boosting(
     )
     model.fit(features.to_numpy(), target)
     return model
+
+
+def train_and_register(features: pl.DataFrame) -> str:
+    """Train on all usable data and register the model in MLflow.
+
+    The column order and the imputation medians are logged with the model.
+    Scikit-learn matches features by position, so a model that outlives the
+    code that built it needs to carry the order it expects, or the service
+    will feed it distance where it expects weight. The medians travel for the
+    same reason: an order whose distance cannot be resolved must be filled the
+    same way at prediction time as it was during training (ADR 0020).
+    """
+    matrix, _ = prepare_matrix(features, features)
+    target = features["is_late"].to_numpy()
+    model = fit_logistic(matrix, target)
+
+    medians = {
+        column: float(cast(float, features[column].median())) for column in NULLABLE_FEATURES
+    }
+
+    with mlflow.start_run(run_name="production-candidate") as run:
+        mlflow.log_params(
+            {
+                "model": "logistic_regression",
+                "train_orders": features.height,
+                "trained_through": cast(datetime, features["purchase_timestamp"].max())
+                .date()
+                .isoformat(),
+            }
+        )
+        mlflow.log_metric("train_rate", float(target.mean()))
+        mlflow.log_dict({"columns": FEATURE_COLUMNS, "medians": medians}, "feature_columns.json")
+        mlflow.sklearn.log_model(model, name="model")
+        return str(run.info.run_id)
 
 
 def run_experiment(

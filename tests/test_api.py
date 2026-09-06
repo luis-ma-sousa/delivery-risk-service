@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from delivery_risk.api.app import app, session_dependency
+from delivery_risk.prediction import ConstantModel
 
 client = TestClient(app)
 
@@ -43,9 +44,22 @@ def no_database() -> Generator[Session, None, None]:
 
 @pytest.fixture(autouse=True)
 def without_database() -> Generator[None, None, None]:
-    """Replace the session for every test in this module, then restore it."""
+    """Replace the session and pin the model for every test in this module.
+
+    The model is pinned because it is otherwise whatever MODEL_RUN_ID happens
+    to name in the developer's environment. A test whose result depends on
+    local configuration passes or fails for reasons that have nothing to do
+    with the code.
+    """
+    import delivery_risk.api.app as app_module
+
+    original_model = app_module.model
+    app_module.model = ConstantModel()
     app.dependency_overrides[session_dependency] = no_database
+
     yield
+
+    app_module.model = original_model
     app.dependency_overrides.clear()
 
 

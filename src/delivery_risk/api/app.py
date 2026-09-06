@@ -4,6 +4,7 @@ The endpoint depends on the RiskModel protocol, never on a concrete model.
 Swapping the constant model for a trained one changes nothing in this file.
 """
 
+import os
 from collections.abc import Generator
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 from delivery_risk.api.schemas import PredictionRequest, PredictionResponse
 from delivery_risk.database import get_session
 from delivery_risk.features import UnknownSellerError, build_features
-from delivery_risk.prediction import ConstantModel, RiskModel
+from delivery_risk.prediction import ConstantModel, RiskModel, TrainedModel
 
 app = FastAPI(
     title="Delivery Risk Service",
@@ -22,7 +23,21 @@ app = FastAPI(
     version="0.1.0",
 )
 
-model: RiskModel = ConstantModel()
+
+def load_model() -> RiskModel:
+    """Load the registered model if one is configured, or fall back.
+
+    The service starts either way. A missing MODEL_RUN_ID is a deployment
+    that has not been given a model yet, not a fault, and `/health` reports
+    which one is loaded so the difference is visible rather than assumed.
+    """
+    run_id = os.environ.get("MODEL_RUN_ID")
+    if not run_id:
+        return ConstantModel()
+    return TrainedModel(run_id)
+
+
+model: RiskModel = load_model()
 
 
 def session_dependency() -> Generator[Session, None, None]:
